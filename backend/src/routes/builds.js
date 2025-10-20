@@ -10,6 +10,14 @@ import { enforceQuotas } from '../middleware/quotas.js';
 
 const router = express.Router();
 
+// Anonymous user ID for MVP (no authentication required)
+const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+// Helper function to get effective user ID (supports anonymous access in MVP)
+function getEffectiveUserId(req) {
+  return req.user?.id || ANONYMOUS_USER_ID;
+}
+
 /**
  * GET /api/builds/:id
  * Get build details
@@ -28,7 +36,8 @@ router.get('/:id', enforceQuotas, async (req, res) => {
     const build = result.rows[0];
 
     // Check ownership
-    if (build.user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (build.user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -75,7 +84,8 @@ router.get('/project/:projectId', enforceQuotas, async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    if (projectResult.rows[0].user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (projectResult.rows[0].user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -122,7 +132,8 @@ router.get('/:id/logs', enforceQuotas, async (req, res) => {
     const build = result.rows[0];
 
     // Check ownership
-    if (build.user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (build.user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 

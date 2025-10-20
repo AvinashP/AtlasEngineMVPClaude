@@ -12,6 +12,14 @@ import { enforceQuotas } from '../middleware/quotas.js';
 
 const router = express.Router();
 
+// Anonymous user ID for MVP (no authentication required)
+const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+// Helper function to get effective user ID (supports anonymous access in MVP)
+function getEffectiveUserId(req) {
+  return req.user?.id || ANONYMOUS_USER_ID;
+}
+
 /**
  * GET /api/previews/:id
  * Get preview details
@@ -30,7 +38,8 @@ router.get('/:id', enforceQuotas, async (req, res) => {
     const preview = result.rows[0];
 
     // Check ownership
-    if (preview.user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (preview.user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -78,7 +87,8 @@ router.get('/project/:projectId', enforceQuotas, async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    if (projectResult.rows[0].user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (projectResult.rows[0].user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -133,7 +143,8 @@ router.delete('/:id', enforceQuotas, async (req, res) => {
     const preview = result.rows[0];
 
     // Check ownership
-    if (preview.user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (preview.user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -176,7 +187,8 @@ router.get('/:id/logs', enforceQuotas, async (req, res) => {
     const preview = result.rows[0];
 
     // Check ownership
-    if (preview.user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (preview.user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -216,7 +228,8 @@ router.get('/:id/stats', enforceQuotas, async (req, res) => {
     const preview = result.rows[0];
 
     // Check ownership
-    if (preview.user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (preview.user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -261,7 +274,8 @@ router.post('/:id/health', enforceQuotas, async (req, res) => {
     const preview = result.rows[0];
 
     // Check ownership
-    if (preview.user_id !== userId) {
+    const effectiveUserId = getEffectiveUserId(req);
+    if (preview.user_id !== effectiveUserId) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 

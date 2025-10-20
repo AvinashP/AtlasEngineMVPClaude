@@ -23,6 +23,20 @@ const router = express.Router();
 // Base projects directory from environment
 const PROJECTS_DIR = process.env.PROJECTS_DIR || path.join(process.cwd(), '../projects');
 
+// Anonymous user ID for MVP (no authentication required)
+const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+// Helper function to get effective user ID (supports anonymous access in MVP)
+function getEffectiveUserId(req) {
+  return req.user?.id || ANONYMOUS_USER_ID;
+}
+
+// Helper function to check project ownership (supports anonymous access in MVP)
+function checkOwnership(project, req) {
+  const effectiveUserId = getEffectiveUserId(req);
+  return project.user_id === effectiveUserId;
+}
+
 /**
  * POST /api/projects
  * Create a new project with memory initialization
@@ -142,7 +156,7 @@ router.get('/:id', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -190,7 +204,7 @@ router.get('/session/:sessionId', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -230,7 +244,7 @@ router.patch('/:id', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -262,7 +276,7 @@ router.delete('/:id', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -294,7 +308,7 @@ router.post('/:id/build', enforceQuotas, checkBuildQuota, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -335,7 +349,7 @@ router.post('/:id/deploy', enforceQuotas, checkContainerQuota, async (req, res) 
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -381,7 +395,7 @@ router.get('/:id/files', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -432,7 +446,7 @@ router.get('/:id/files/content', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -477,7 +491,7 @@ router.put('/:id/files/content', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 

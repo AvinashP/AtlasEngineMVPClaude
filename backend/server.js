@@ -52,7 +52,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // ============================================================================
 
 // Security headers
-// In development, disable CSP to avoid issues
+// In development, disable most helmet protections to avoid CORS/CSP issues
 if (NODE_ENV === 'production') {
   app.use(helmet({
     contentSecurityPolicy: {
@@ -66,16 +66,20 @@ if (NODE_ENV === 'production') {
     }
   }));
 } else {
-  // Development: Use helmet but disable CSP
-  app.use(helmet({
-    contentSecurityPolicy: false
-  }));
+  // Development: Disable helmet entirely for easier debugging
+  // In production, all security headers will be enabled
+  console.log('⚠️  Running in development mode - Helmet security headers disabled');
+  // Skip helmet entirely in development
 }
 
-// CORS
+// CORS - Enhanced configuration for development
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-Request-Id'],
+  maxAge: 86400 // 24 hours
 }));
 
 // Body parsers
@@ -85,7 +89,20 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Request logging (development only)
 if (NODE_ENV === 'development') {
   app.use((req, res, next) => {
+    console.log(`\n=== Incoming Request ===`);
     console.log(`${req.method} ${req.path}`);
+    console.log(`Origin: ${req.headers.origin || 'none'}`);
+    console.log(`Authorization: ${req.headers.authorization ? 'present' : 'none'}`);
+    console.log(`Content-Type: ${req.headers['content-type'] || 'none'}`);
+
+    // Capture response
+    const originalSend = res.send;
+    res.send = function(data) {
+      console.log(`Response Status: ${res.statusCode}`);
+      console.log(`======================\n`);
+      originalSend.call(this, data);
+    };
+
     next();
   });
 }

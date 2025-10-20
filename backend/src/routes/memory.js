@@ -10,6 +10,20 @@ import { enforceQuotas } from '../middleware/quotas.js';
 
 const router = express.Router();
 
+// Anonymous user ID for MVP (no authentication required)
+const ANONYMOUS_USER_ID = '00000000-0000-0000-0000-000000000000';
+
+// Helper function to get effective user ID (supports anonymous access in MVP)
+function getEffectiveUserId(req) {
+  return req.user?.id || ANONYMOUS_USER_ID;
+}
+
+// Helper function to check project ownership (supports anonymous access in MVP)
+function checkOwnership(project, req) {
+  const effectiveUserId = getEffectiveUserId(req);
+  return project.user_id === effectiveUserId;
+}
+
 /**
  * GET /api/projects/:id/memory
  * Get CLAUDE.md content for a project
@@ -26,7 +40,7 @@ router.get('/:id/memory', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -78,7 +92,7 @@ router.post('/:id/memory', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -125,7 +139,7 @@ router.post('/:id/memory/checkpoint', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -170,7 +184,7 @@ router.get('/:id/memory/stats', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -212,7 +226,7 @@ router.post('/:id/memory/compact', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -246,7 +260,7 @@ router.get('/:id/memory/health', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -279,7 +293,7 @@ router.post('/:id/memory/init', enforceQuotas, async (req, res) => {
     }
 
     // Check ownership
-    if (project.user_id !== userId) {
+    if (!checkOwnership(project, req)) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
