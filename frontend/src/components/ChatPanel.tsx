@@ -317,6 +317,27 @@ function ChatPanel({ projectId }: ChatPanelProps) {
     }
   };
 
+  const handleStop = () => {
+    // Stop current processing
+    setIsProcessing(false);
+    setIsTyping(false);
+    setCurrentActivity('');
+
+    // Add system message indicating stop
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: generateId(),
+        role: 'system',
+        content: 'Request stopped by user',
+        timestamp: new Date(),
+      },
+    ]);
+
+    // Note: In a real implementation, we'd send a stop signal to the backend
+    // For now, this just updates the UI state
+  };
+
   return (
     <div className="h-full flex flex-col bg-gray-800">
       {/* Header */}
@@ -339,18 +360,6 @@ function ChatPanel({ projectId }: ChatPanelProps) {
           </div>
         </div>
       </div>
-
-      {/* Activity Status Indicator */}
-      {isProcessing && currentActivity && (
-        <div className="px-4 py-2 bg-blue-900/30 border-b border-blue-700/50 flex items-center gap-2">
-          <div className="flex gap-1">
-            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
-            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-          </div>
-          <span className="text-sm text-blue-300 font-medium">{currentActivity}</span>
-        </div>
-      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-auto p-4 space-y-3">
@@ -438,26 +447,39 @@ function ChatPanel({ projectId }: ChatPanelProps) {
       <div className="p-4 border-t border-gray-700">
         <div className="flex gap-2">
           <textarea
-            value={input}
+            value={isProcessing ? '' : input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={
-              isConnected ? 'Ask Claude Code anything...' : 'Connecting to chat...'
+              isProcessing
+                ? currentActivity
+                : isConnected
+                ? 'Ask Claude Code anything...'
+                : 'Connecting to chat...'
             }
-            disabled={!isConnected}
-            className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+            disabled={!isConnected || isProcessing}
+            className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none disabled:opacity-75"
             rows={3}
           />
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || !isConnected || isTyping}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-sm font-medium self-end"
-          >
-            Send
-          </button>
+          {isProcessing ? (
+            <button
+              onClick={handleStop}
+              className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded text-sm font-medium self-end"
+            >
+              Stop
+            </button>
+          ) : (
+            <button
+              onClick={handleSend}
+              disabled={!input.trim() || !isConnected}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-sm font-medium self-end"
+            >
+              Send
+            </button>
+          )}
         </div>
         <div className="mt-2 text-xs text-gray-500">
-          Press Enter to send, Shift+Enter for new line
+          {isProcessing ? 'Claude is working...' : 'Press Enter to send, Shift+Enter for new line'}
         </div>
       </div>
     </div>
