@@ -34,6 +34,8 @@ function ChatPanel({ projectId }: ChatPanelProps) {
   const [isConnected, setIsConnected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [currentActivity, setCurrentActivity] = useState<string>('');
+  const [isProcessing, setIsProcessing] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -45,13 +47,43 @@ function ChatPanel({ projectId }: ChatPanelProps) {
 
       if (response.data.success && response.data.messages.length > 0) {
         // Convert database messages to UI format
-        const historyMessages: Message[] = response.data.messages.map((msg: any) => ({
-          id: msg.id,
-          role: msg.role,
-          content: msg.content,
-          timestamp: new Date(msg.created_at),
-        }));
-        console.log('Loaded messages:', historyMessages.map(m => ({ id: m.id, role: m.role })));
+        const historyMessages: Message[] = [];
+
+        for (const msg of response.data.messages) {
+          // Check if message has tool use events in meta
+          if (msg.meta && msg.meta.toolUseEvents && Array.isArray(msg.meta.toolUseEvents)) {
+            // Create separate messages for each tool use event
+            for (const toolEvent of msg.meta.toolUseEvents) {
+              historyMessages.push({
+                id: `${msg.id}-tool-${toolEvent.id}`,
+                role: 'assistant',
+                content: '',
+                timestamp: new Date(msg.created_at),
+                isToolUse: true,
+                toolName: toolEvent.name,
+                toolInput: toolEvent.input,
+                toolId: toolEvent.id,
+              });
+            }
+          }
+
+          // Add the main message (text content)
+          if (msg.content && msg.content.trim()) {
+            historyMessages.push({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              timestamp: new Date(msg.created_at),
+            });
+          }
+        }
+
+        console.log('Loaded messages:', historyMessages.map(m => ({
+          id: m.id,
+          role: m.role,
+          isToolUse: m.isToolUse,
+          toolName: m.toolName
+        })));
         setMessages(historyMessages);
       } else {
         // No history, show welcome message
@@ -107,6 +139,8 @@ function ChatPanel({ projectId }: ChatPanelProps) {
     // Handle AI typing indicator
     socket.on('ai-typing', () => {
       setIsTyping(true);
+      setIsProcessing(true);
+      setCurrentActivity('Processing your request...');
     });
 
     // Handle streaming events from Claude CLI
@@ -115,6 +149,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
 
       if (data.type === 'text') {
         // Stream text content - append to current streaming message
+        setCurrentActivity('Writing response...');
         setMessages((prev) => {
           const updated = [...prev];
           const lastMessage = updated[updated.length - 1];
@@ -136,6 +171,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
         });
       } else if (data.type === 'tool_use') {
         // Tool use event - create a tool message
+        setCurrentActivity(`Using ${data.data.name}...`);
         setMessages((prev) => [
           ...prev,
           {
@@ -155,6 +191,8 @@ function ChatPanel({ projectId }: ChatPanelProps) {
     // Handle completion
     socket.on('claude-complete', (data: { tokensUsed: number; model: string; exitCode: number }) => {
       setIsTyping(false);
+      setIsProcessing(false);
+      setCurrentActivity('');
 
       // Mark streaming message as complete
       setMessages((prev) => {
@@ -301,6 +339,18 @@ function ChatPanel({ projectId }: ChatPanelProps) {
           </div>
         </div>
       </div>
+
+      {/* Activity Status Indicator */}
+      {isProcessing && currentActivity && (
+        <div className="px-4 py-2 bg-blue-900/30 border-b border-blue-700/50 flex items-center gap-2">
+          <div className="flex gap-1">
+            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
+            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          </div>
+          <span className="text-sm text-blue-300 font-medium">{currentActivity}</span>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-auto p-4 space-y-3">

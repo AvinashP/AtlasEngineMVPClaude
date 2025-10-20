@@ -343,6 +343,7 @@ io.on('connection', (socket) => {
       let assistantMessage = '';
       let tokensUsed = 0;
       let model = 'claude-sonnet-4-5';
+      const toolUseEvents = []; // Collect tool use events for database storage
 
       // Handle stdout - stream events to client in real-time
       claudeProcess.stdout.on('data', (data) => {
@@ -391,22 +392,22 @@ io.on('connection', (socket) => {
                           data: { text: content.text }
                         });
                       } else if (content.type === 'tool_use') {
+                        // Store tool use event for database persistence
+                        const toolEvent = {
+                          id: content.id,
+                          name: content.name,
+                          input: content.input
+                        };
+                        toolUseEvents.push(toolEvent);
+
                         // Stream tool use event
                         socket.emit('claude-stream-event', {
                           type: 'tool_use',
-                          data: {
-                            id: content.id,
-                            name: content.name,
-                            input: content.input
-                          }
+                          data: toolEvent
                         });
                         socket.to(`project-${projectId}`).emit('claude-stream-event', {
                           type: 'tool_use',
-                          data: {
-                            id: content.id,
-                            name: content.name,
-                            input: content.input
-                          }
+                          data: toolEvent
                         });
                       }
                     }
@@ -443,8 +444,9 @@ io.on('connection', (socket) => {
       // Handle process completion
       claudeProcess.on('close', async (code) => {
         if (code === 0) {
-          // Save assistant message to database
+          // Save assistant message to database with tool use events in meta
           try {
+            const meta = toolUseEvents.length > 0 ? { toolUseEvents } : null;
             await saveChatMessage({
               projectId,
               userId: project.user_id,
@@ -452,7 +454,7 @@ io.on('connection', (socket) => {
               content: assistantMessage || 'No response',
               tokensUsed: tokensUsed || 0,
               model: model,
-              meta: null,
+              meta: meta,
             });
           } catch (error) {
             console.error('Failed to save assistant message:', error.message);
