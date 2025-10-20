@@ -52,17 +52,25 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 // ============================================================================
 
 // Security headers
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      connectSrc: ["'self'", process.env.CORS_ORIGIN || 'http://localhost:5173'],
-      imgSrc: ["'self'", 'data:', 'https:'],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'"]
+// In development, disable CSP to avoid issues
+if (NODE_ENV === 'production') {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'", process.env.CORS_ORIGIN || 'http://localhost:5173'],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"]
+      }
     }
-  }
-}));
+  }));
+} else {
+  // Development: Use helmet but disable CSP
+  app.use(helmet({
+    contentSecurityPolicy: false
+  }));
+}
 
 // CORS
 app.use(cors({
