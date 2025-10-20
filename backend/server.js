@@ -263,45 +263,232 @@ io.on('connection', (socket) => {
     console.log(`Socket ${socket.id} left project ${projectId}`);
   });
 
-  // AI chat message handler
+  // AI chat message handler with streaming support
   socket.on('ai-message', async (data) => {
     const { projectId, message } = data;
 
     try {
       // Forward typing event
+      socket.emit('ai-typing', { projectId });
       socket.to(`project-${projectId}`).emit('ai-typing', { projectId });
+
+      // Get project details and initialize session if needed
+      const { getProjectById, saveChatMessage, getChatHistory } = await import('./src/db/queries.js');
+      const project = await getProjectById(projectId);
+
+      if (!project) {
+        socket.emit('ai-error', { error: 'Project not found' });
+        return;
+      }
 
       // Initialize session if needed
       if (!claudeService.isSessionActive(projectId)) {
-        // Get project details from database
-        const { getProjectById } = await import('./src/db/queries.js');
-        const project = await getProjectById(projectId);
-
-        if (!project) {
-          socket.emit('ai-error', { error: 'Project not found' });
-          return;
-        }
-
-        // Use project's actual path and user ID
         await claudeService.initializeSession(projectId, project.path, project.user_id);
       }
 
-      // Send message to Claude
-      const response = await claudeService.sendMessage(projectId, message);
+      // Save user message to database
+      try {
+        await saveChatMessage({
+          projectId,
+          userId: project.user_id,
+          role: 'user',
+          content: message,
+          tokensUsed: 0,
+          model: null,
+          meta: null,
+        });
+      } catch (error) {
+        console.error('Failed to save user message:', error.message);
+      }
 
-      // Send response back to client
-      socket.emit('ai-response', {
-        message: response.message,
-        tokensUsed: response.tokensUsed,
-        model: response.model,
+      // Load conversation history for context
+      let conversationHistory = [];
+      try {
+        const dbHistory = await getChatHistory(projectId, 10);
+        conversationHistory = dbHistory.map(msg => ({
+          role: msg.role,
+          content: msg.content,
+        }));
+      } catch (error) {
+        console.warn('Failed to load conversation history:', error.message);
+      }
+
+      // Get session for project path
+      const session = claudeService.getSession(projectId);
+      if (!session) {
+        socket.emit('ai-error', { error: 'Session not initialized' });
+        return;
+      }
+
+      // Spawn Claude CLI directly for streaming
+      const { spawn } = await import('child_process');
+      const { randomUUID } = await import('crypto');
+      const sessionId = randomUUID();
+
+      const claudeArgs = [
+        '--print',
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--dangerously-skip-permissions',
+        '--session-id', sessionId,
+        message
+      ];
+
+      const claudePath = '/opt/homebrew/bin/claude';
+      const claudeProcess = spawn(claudePath, claudeArgs, {
+        cwd: session.projectPath,
+        stdio: ['pipe', 'pipe', 'pipe']
       });
 
-      // Also broadcast to project room
-      socket.to(`project-${projectId}`).emit('ai-response', {
-        message: response.message,
-        tokensUsed: response.tokensUsed,
-        model: response.model,
+      let assistantMessage = '';
+      let tokensUsed = 0;
+      let model = 'claude-sonnet-4-5';
+
+      // Handle stdout - stream events to client in real-time
+      claudeProcess.stdout.on('data', (data) => {
+        const rawOutput = data.toString();
+        const lines = rawOutput.split('\n').filter(line => line.trim());
+
+        for (const line of lines) {
+          try {
+            const event = JSON.parse(line);
+
+            // Emit raw event to client for debugging
+            // console.log('Claude event:', event.type);
+
+            switch (event.type) {
+              case 'system':
+                if (event.model) {
+                  model = event.model;
+                }
+                // Send system init event
+                socket.emit('claude-stream-event', {
+                  type: 'system',
+                  data: event
+                });
+                socket.to(`project-${projectId}`).emit('claude-stream-event', {
+                  type: 'system',
+                  data: event
+                });
+                break;
+
+              case 'assistant':
+                if (event.message) {
+                  model = event.message.model || model;
+
+                  // Extract content array
+                  if (event.message.content && Array.isArray(event.message.content)) {
+                    for (const content of event.message.content) {
+                      if (content.type === 'text' && content.text) {
+                        // Stream text content
+                        assistantMessage += content.text;
+                        socket.emit('claude-stream-event', {
+                          type: 'text',
+                          data: { text: content.text }
+                        });
+                        socket.to(`project-${projectId}`).emit('claude-stream-event', {
+                          type: 'text',
+                          data: { text: content.text }
+                        });
+                      } else if (content.type === 'tool_use') {
+                        // Stream tool use event
+                        socket.emit('claude-stream-event', {
+                          type: 'tool_use',
+                          data: {
+                            id: content.id,
+                            name: content.name,
+                            input: content.input
+                          }
+                        });
+                        socket.to(`project-${projectId}`).emit('claude-stream-event', {
+                          type: 'tool_use',
+                          data: {
+                            id: content.id,
+                            name: content.name,
+                            input: content.input
+                          }
+                        });
+                      }
+                    }
+                  }
+
+                  // Extract token usage
+                  if (event.message.usage && event.message.usage.output_tokens) {
+                    tokensUsed = event.message.usage.output_tokens;
+                  }
+                }
+                break;
+
+              case 'result':
+                // Extract final token usage
+                if (event.usage && event.usage.output_tokens) {
+                  tokensUsed = event.usage.output_tokens;
+                }
+                if (event.modelUsage && event.modelUsage['claude-sonnet-4-5-20250929']) {
+                  tokensUsed = event.modelUsage['claude-sonnet-4-5-20250929'].outputTokens || tokensUsed;
+                }
+                break;
+            }
+          } catch (error) {
+            // Non-JSON line, likely verbose debug output - ignore
+          }
+        }
       });
+
+      // Handle stderr
+      claudeProcess.stderr.on('data', (data) => {
+        console.error('Claude CLI stderr:', data.toString());
+      });
+
+      // Handle process completion
+      claudeProcess.on('close', async (code) => {
+        if (code === 0) {
+          // Save assistant message to database
+          try {
+            await saveChatMessage({
+              projectId,
+              userId: project.user_id,
+              role: 'assistant',
+              content: assistantMessage || 'No response',
+              tokensUsed: tokensUsed || 0,
+              model: model,
+              meta: null,
+            });
+          } catch (error) {
+            console.error('Failed to save assistant message:', error.message);
+          }
+
+          // Send completion event
+          socket.emit('claude-complete', {
+            tokensUsed,
+            model,
+            exitCode: code
+          });
+          socket.to(`project-${projectId}`).emit('claude-complete', {
+            tokensUsed,
+            model,
+            exitCode: code
+          });
+
+          // Update session stats
+          if (session) {
+            session.messageCount++;
+            session.tokensUsed += tokensUsed || 0;
+          }
+        } else {
+          socket.emit('ai-error', { error: `Claude CLI exited with code ${code}` });
+        }
+      });
+
+      // Handle process errors
+      claudeProcess.on('error', (error) => {
+        console.error('Claude CLI process error:', error);
+        socket.emit('ai-error', { error: error.message });
+      });
+
+      // Close stdin
+      claudeProcess.stdin.end();
+
     } catch (error) {
       console.error('AI message error:', error);
       socket.emit('ai-error', { error: error.message });

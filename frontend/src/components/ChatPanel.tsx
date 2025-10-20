@@ -16,6 +16,11 @@ interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: Date;
+  isStreaming?: boolean;
+  isToolUse?: boolean;
+  toolName?: string;
+  toolInput?: any;
+  toolId?: string;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
@@ -99,6 +104,71 @@ function ChatPanel({ projectId }: ChatPanelProps) {
       setIsConnected(false);
     });
 
+    // Handle AI typing indicator
+    socket.on('ai-typing', () => {
+      setIsTyping(true);
+    });
+
+    // Handle streaming events from Claude CLI
+    socket.on('claude-stream-event', (data: { type: string; data: any }) => {
+      setIsTyping(false);
+
+      if (data.type === 'text') {
+        // Stream text content - append to current streaming message
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastMessage = updated[updated.length - 1];
+
+          if (lastMessage && lastMessage.role === 'assistant' && lastMessage.isStreaming && !lastMessage.isToolUse) {
+            // Append to existing streaming message
+            lastMessage.content += data.data.text;
+          } else {
+            // Create new streaming message
+            updated.push({
+              id: generateId(),
+              role: 'assistant',
+              content: data.data.text,
+              timestamp: new Date(),
+              isStreaming: true,
+            });
+          }
+          return updated;
+        });
+      } else if (data.type === 'tool_use') {
+        // Tool use event - create a tool message
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            role: 'assistant',
+            content: '',
+            timestamp: new Date(),
+            isToolUse: true,
+            toolName: data.data.name,
+            toolInput: data.data.input,
+            toolId: data.data.id,
+          },
+        ]);
+      }
+    });
+
+    // Handle completion
+    socket.on('claude-complete', (data: { tokensUsed: number; model: string; exitCode: number }) => {
+      setIsTyping(false);
+
+      // Mark streaming message as complete
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMessage = updated[updated.length - 1];
+
+        if (lastMessage && lastMessage.role === 'assistant' && lastMessage.isStreaming) {
+          lastMessage.isStreaming = false;
+        }
+        return updated;
+      });
+    });
+
+    // Keep old ai-response handler for backward compatibility
     socket.on('ai-response', (data: { message: string }) => {
       setIsTyping(false);
       setMessages((prev) => [
@@ -112,10 +182,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
       ]);
     });
 
-    socket.on('ai-typing', () => {
-      setIsTyping(true);
-    });
-
+    // Handle errors
     socket.on('ai-error', (data: { error: string }) => {
       setIsTyping(false);
       setMessages((prev) => [
@@ -257,16 +324,48 @@ function ChatPanel({ projectId }: ChatPanelProps) {
             key={message.id}
             className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
           >
-            <div className={`max-w-[80%] rounded-lg p-3 ${getMessageStyle(message.role)}`}>
-              <div className="text-sm whitespace-pre-wrap break-words">{message.content}</div>
-              <div
-                className={`text-xs mt-1 ${
-                  message.role === 'user' ? 'text-blue-200' : 'text-gray-400'
-                }`}
-              >
-                {formatTime(message.timestamp)}
+            {message.isToolUse ? (
+              // Tool use message display
+              <div className="max-w-[80%] bg-blue-900/20 border border-blue-700 rounded-lg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span className="font-medium text-blue-300">Using {message.toolName}</span>
+                </div>
+                {message.toolInput && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-blue-400 cursor-pointer hover:text-blue-300">
+                      View parameters
+                    </summary>
+                    <pre className="mt-2 text-xs bg-gray-900 p-2 rounded text-blue-200 overflow-x-auto">
+                      {JSON.stringify(message.toolInput, null, 2)}
+                    </pre>
+                  </details>
+                )}
+                <div className="text-xs mt-2 text-gray-400">
+                  {formatTime(message.timestamp)}
+                </div>
               </div>
-            </div>
+            ) : (
+              // Normal text message display
+              <div className={`max-w-[80%] rounded-lg p-3 ${getMessageStyle(message.role)}`}>
+                <div className="text-sm whitespace-pre-wrap break-words">
+                  {message.content}
+                  {message.isStreaming && (
+                    <span className="inline-block w-2 h-4 bg-current ml-1 animate-pulse"></span>
+                  )}
+                </div>
+                <div
+                  className={`text-xs mt-1 ${
+                    message.role === 'user' ? 'text-blue-200' : 'text-gray-400'
+                  }`}
+                >
+                  {formatTime(message.timestamp)}
+                </div>
+              </div>
+            )}
           </div>
         ))}
 
