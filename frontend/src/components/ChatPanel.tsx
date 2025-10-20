@@ -27,7 +27,11 @@ function ChatPanel({ projectId }: ChatPanelProps) {
 
   useEffect(() => {
     // Initialize Socket.IO connection
-    const socket = io(import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000', {
+    // Extract base URL without /api path for WebSocket connection
+    const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+    const wsUrl = apiBaseUrl.replace(/\/api$/, '');
+
+    const socket = io(wsUrl, {
       transports: ['websocket'],
     });
 
