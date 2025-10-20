@@ -29,10 +29,48 @@ function App() {
   const [tabs, setTabs] = useState<Tab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
+  // Panel widths (in pixels)
+  const [leftPanelWidth, setLeftPanelWidth] = useState(256);
+  const [rightPanelWidth, setRightPanelWidth] = useState(384);
+  const [isResizingLeft, setIsResizingLeft] = useState(false);
+  const [isResizingRight, setIsResizingRight] = useState(false);
+
   // Load projects on mount
   useEffect(() => {
     loadProjects();
   }, []);
+
+  // Handle mouse move for resizing
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (isResizingLeft) {
+        const newWidth = Math.max(200, Math.min(600, e.clientX));
+        setLeftPanelWidth(newWidth);
+      } else if (isResizingRight) {
+        const newWidth = Math.max(300, Math.min(800, window.innerWidth - e.clientX));
+        setRightPanelWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingLeft(false);
+      setIsResizingRight(false);
+    };
+
+    if (isResizingLeft || isResizingRight) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isResizingLeft, isResizingRight]);
 
   // Auto-open Preview, Memory, and Admin tabs when project loads
   useEffect(() => {
@@ -180,7 +218,10 @@ function App() {
   return (
     <div className="flex h-screen bg-gray-900 text-gray-100">
       {/* Left Panel - File Explorer */}
-      <div className="w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
+      <div
+        className="bg-gray-800 border-r border-gray-700 flex flex-col"
+        style={{ width: `${leftPanelWidth}px` }}
+      >
         <div className="p-3 border-b border-gray-700">
           <select
             value={currentProject?.id || ''}
@@ -218,6 +259,12 @@ function App() {
           )}
         </div>
       </div>
+
+      {/* Left Resize Handle */}
+      <div
+        className="w-1 bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors"
+        onMouseDown={() => setIsResizingLeft(true)}
+      />
 
       {/* Center Panel - Tabs */}
       <div className="flex-1 flex flex-col">
@@ -313,8 +360,17 @@ function App() {
         </div>
       </div>
 
+      {/* Right Resize Handle */}
+      <div
+        className="w-1 bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors"
+        onMouseDown={() => setIsResizingRight(true)}
+      />
+
       {/* Right Panel - Chat Only */}
-      <div className="w-96 border-l border-gray-700">
+      <div
+        className="border-l border-gray-700"
+        style={{ width: `${rightPanelWidth}px` }}
+      >
         {currentProject ? (
           <ChatPanel projectId={currentProject.id} />
         ) : (
