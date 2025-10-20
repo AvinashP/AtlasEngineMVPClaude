@@ -322,6 +322,38 @@ CREATE INDEX idx_sessions_active ON sessions(is_active);
 CREATE INDEX idx_sessions_expires ON sessions(expires_at);
 
 -- ============================================================================
+-- CHAT MESSAGES TABLE (Persistent Chat History)
+-- ============================================================================
+
+CREATE TABLE chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+
+  -- Message content
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+
+  -- Metadata
+  tokens_used INT DEFAULT 0,
+  model TEXT,
+  meta JSONB,  -- For tool use, attachments, code execution, etc.
+
+  -- Status
+  is_deleted BOOLEAN DEFAULT FALSE,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for efficient queries
+CREATE INDEX idx_chat_messages_project ON chat_messages(project_id, created_at DESC);
+CREATE INDEX idx_chat_messages_user ON chat_messages(user_id);
+CREATE INDEX idx_chat_messages_role ON chat_messages(role);
+CREATE INDEX idx_chat_messages_created ON chat_messages(created_at DESC);
+CREATE INDEX idx_chat_messages_project_role ON chat_messages(project_id, role);
+
+-- ============================================================================
 -- FUNCTIONS AND TRIGGERS
 -- ============================================================================
 
@@ -426,6 +458,32 @@ LEFT JOIN builds b ON p.id = b.project_id
 LEFT JOIN previews pr ON p.id = pr.project_id
 GROUP BY p.id, p.name, p.user_id, p.status, p.has_memory;
 
+-- View for recent chat messages by project
+CREATE OR REPLACE VIEW recent_chat_messages AS
+SELECT
+  cm.*,
+  p.name as project_name,
+  u.email as user_email
+FROM chat_messages cm
+JOIN projects p ON cm.project_id = p.id
+LEFT JOIN users u ON cm.user_id = u.id
+WHERE cm.is_deleted = FALSE
+ORDER BY cm.created_at DESC;
+
+-- View for chat statistics by project
+CREATE OR REPLACE VIEW chat_stats_by_project AS
+SELECT
+  project_id,
+  COUNT(*) as total_messages,
+  COUNT(CASE WHEN role = 'user' THEN 1 END) as user_messages,
+  COUNT(CASE WHEN role = 'assistant' THEN 1 END) as assistant_messages,
+  SUM(tokens_used) as total_tokens,
+  MIN(created_at) as first_message_at,
+  MAX(created_at) as last_message_at
+FROM chat_messages
+WHERE is_deleted = FALSE
+GROUP BY project_id;
+
 -- ============================================================================
 -- COMMENTS (Documentation)
 -- ============================================================================
@@ -439,6 +497,7 @@ COMMENT ON TABLE memory_snapshots IS 'CLAUDE.md version history for session cont
 COMMENT ON TABLE usage_ledger IS 'Usage tracking for billing and analytics';
 COMMENT ON TABLE events IS 'Audit trail and observability events';
 COMMENT ON TABLE sessions IS 'User session management';
+COMMENT ON TABLE chat_messages IS 'Persistent chat history for Claude Code conversations';
 
 -- ============================================================================
 -- SCHEMA VERSION
@@ -459,7 +518,7 @@ INSERT INTO schema_version (version, description) VALUES (1, 'Initial schema wit
 DO $$
 BEGIN
   RAISE NOTICE '✅ AtlasEngine database schema created successfully!';
-  RAISE NOTICE 'Tables: users, user_quotas, projects, builds, previews, memory_snapshots, usage_ledger, events, sessions';
-  RAISE NOTICE 'Views: user_usage_summary, project_health';
+  RAISE NOTICE 'Tables: users, user_quotas, projects, builds, previews, memory_snapshots, usage_ledger, events, sessions, chat_messages';
+  RAISE NOTICE 'Views: user_usage_summary, project_health, recent_chat_messages, chat_stats_by_project';
   RAISE NOTICE 'Ready for application initialization';
 END $$;
