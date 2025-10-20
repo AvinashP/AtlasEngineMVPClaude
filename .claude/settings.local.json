@@ -23,7 +23,12 @@
       "Bash(git init)",
       "Bash(git remote add origin https://github.com/AvinashP/AtlasEngineMVPClaude.git)",
       "Bash(git branch -M main)",
-      "Bash(git add .)"
+      "Bash(git add .)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: AtlasEngine MVP - Complete full-stack implementation\n\n🎉 Full-stack AI-powered development platform with persistent memory\n\nBackend (20+ files, ~5,150 lines):\n- Express.js server with Socket.IO WebSocket support\n- PostgreSQL database (9 tables, 2 views, triggers)\n- Memory Management Service (CLAUDE.md persistent context)\n- Docker Service (security-hardened container orchestration)\n- Port Registry Service (health checks, automatic cleanup)\n- Quota Enforcement Middleware (hard limits for cost protection)\n- Claude Code Service (AI integration with session management)\n- 40+ REST API endpoints\n- Real-time WebSocket events\n\nFrontend (13+ files, ~1,630 lines):\n- React + TypeScript + Tailwind CSS\n- Three-panel layout (FileTree | Editor | Preview/Memory/Chat)\n- Monaco Code Editor integration\n- File navigation with folder expansion\n- CLAUDE.md memory viewer/editor\n- Real-time chat with Claude Code\n- Live app preview with iframe isolation\n- Build and deployment controls\n\nDocumentation (11+ files, ~3,500 lines):\n- Comprehensive setup guides\n- API documentation\n- Testing guides\n- Architecture documentation\n- Automated E2E test script\n\nKey Features:\n- 🧠 Persistent AI memory across unlimited sessions\n- 🔒 Security-hardened Docker containers\n- 💰 Cost protection with enforced quotas\n- 🐳 Automated container orchestration\n- 💬 Real-time AI chat integration\n- 📊 Resource usage tracking\n\nTotal: ~45 files, ~10,830 lines of code\n\n🤖 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push -u origin main)",
+      "Bash(git config user.name)",
+      "Bash(git config user.email)",
+      "Bash(git remote set-url origin git@github.com:AvinashP/AtlasEngineMVPClaude.git)"
     ],
     "deny": [],
     "ask": []
