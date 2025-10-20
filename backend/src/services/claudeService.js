@@ -9,7 +9,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import logger from '../utils/logger.js';
 import memoryService from './memoryService.js';
-import { getUserQuotas, logUsage, saveChatMessage } from '../db/queries.js';
+import { getUserQuotas, logUsage, saveChatMessage, getChatHistory } from '../db/queries.js';
 
 class ClaudeService extends EventEmitter {
   constructor() {
@@ -192,25 +192,35 @@ class ClaudeService extends EventEmitter {
   async _executeClaudeCommand(projectId, message, options = {}) {
     const session = this.sessions.get(projectId);
 
+    // Load recent conversation history from database
+    let conversationHistory = [];
+    try {
+      const dbHistory = await getChatHistory(projectId, 10); // Last 10 messages
+      conversationHistory = dbHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+      logger.info(`Loaded ${conversationHistory.length} messages from database for context`);
+    } catch (error) {
+      logger.warn(`Failed to load conversation history: ${error.message}`);
+      // Continue without history if database load fails
+    }
+
     return new Promise((resolve, reject) => {
       const timeout = options.timeout || 120000; // 2 minutes default
       let response = '';
       let errorOutput = '';
       let tokensUsed = 0;
 
-      // Prepare the command
-      // Note: This is a simplified implementation. In production, you'd use the actual Claude Code CLI
-      // For now, we'll simulate the interaction by spawning a process that reads CLAUDE.md context
+      // Prepare the command with conversation history
       const args = [
         '--project-path', session.projectPath,
         '--message', message,
         '--format', 'json',
+        '--history', JSON.stringify(conversationHistory),
       ];
 
-      // In a real implementation, this would be:
-      // const claudeProcess = spawn('claude', args, { cwd: session.projectPath });
-
-      // For MVP, we'll create a wrapper script that simulates Claude Code behavior
+      // Spawn claude-wrapper.js which integrates with real Claude CLI
       const claudeProcess = spawn('node', [
         path.join(process.cwd(), 'src', 'scripts', 'claude-wrapper.js'),
         ...args,

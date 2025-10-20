@@ -2,22 +2,18 @@
 
 /**
  * Claude Code CLI Wrapper
- * Simulates Claude Code CLI behavior for MVP
- * In production, replace this with actual Claude Code CLI integration
+ * Integrates with actual Claude Code CLI for real AI-powered development
  */
 
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
 let projectPath = '.';
 let message = '';
-let format = 'text';
+let format = 'json';
+let conversationHistory = [];
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--project-path' && args[i + 1]) {
@@ -29,141 +25,168 @@ for (let i = 0; i < args.length; i++) {
   } else if (args[i] === '--format' && args[i + 1]) {
     format = args[i + 1];
     i++;
+  } else if (args[i] === '--history' && args[i + 1]) {
+    try {
+      conversationHistory = JSON.parse(args[i + 1]);
+    } catch (error) {
+      console.error('Failed to parse conversation history:', error.message);
+    }
+    i++;
   }
 }
 
 /**
- * Main wrapper function
+ * Main wrapper function - integrates with real Claude CLI
  */
 async function main() {
   try {
-    // Read CLAUDE.md for context
-    const claudeMdPath = path.join(projectPath, 'CLAUDE.md');
-    let claudeContext = '';
+    // Generate or use existing session ID for conversation continuity
+    const sessionId = randomUUID();
 
-    try {
-      claudeContext = await fs.readFile(claudeMdPath, 'utf8');
-    } catch (error) {
-      claudeContext = 'No CLAUDE.md found. Starting fresh.';
-    }
+    // Prepare Claude CLI command
+    const claudeArgs = [
+      '--print',                          // Non-interactive mode
+      '--output-format', 'stream-json',   // Streaming JSON output
+      '--verbose',                        // Required for stream-json with --print
+      '--dangerously-skip-permissions',   // Auto-accept permissions for automation
+      '--session-id', sessionId,          // Session continuity
+      message                             // The user's prompt
+    ];
 
-    // Read project structure for additional context
-    const projectFiles = await getProjectStructure(projectPath);
+    // Spawn Claude Code CLI process
+    // Use full path since /opt/homebrew/bin may not be in PATH for spawned processes
+    const claudePath = '/opt/homebrew/bin/claude';
+    const claudeProcess = spawn(claudePath, claudeArgs, {
+      cwd: projectPath,  // Claude auto-loads CLAUDE.md from this directory
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
 
-    // In production, this would call the actual Claude API
-    // For MVP, we'll return a simulated response based on the message
-    const response = await simulateClaudeResponse(message, claudeContext, projectFiles);
+    let responseText = '';
+    let tokensUsed = 0;
+    let model = 'claude-sonnet-4-5';
+
+    // Handle stdout (streaming JSON responses)
+    claudeProcess.stdout.on('data', (data) => {
+      const chunk = data.toString();
+      const lines = chunk.split('\n').filter(line => line.trim());
+
+      for (const line of lines) {
+        try {
+          const event = JSON.parse(line);
+
+          // Handle different event types from Claude CLI's stream-json format
+          switch (event.type) {
+            case 'system':
+              // Initialization event - contains model info
+              if (event.model) {
+                model = event.model;
+              }
+              break;
+
+            case 'assistant':
+              // Assistant response event - contains the actual message
+              if (event.message) {
+                model = event.message.model || model;
+                // Extract text from content array - ONLY text content
+                if (event.message.content && Array.isArray(event.message.content)) {
+                  for (const content of event.message.content) {
+                    if (content.type === 'text' && content.text) {
+                      // Clear any previous responseText and use ONLY this text
+                      // (in case there are multiple assistant events)
+                      responseText = content.text;
+                    }
+                  }
+                }
+                // Extract token usage
+                if (event.message.usage && event.message.usage.output_tokens) {
+                  tokensUsed = event.message.usage.output_tokens;
+                }
+              }
+              break;
+
+            case 'result':
+              // Final result event - can also extract usage here
+              if (event.usage && event.usage.output_tokens) {
+                tokensUsed = event.usage.output_tokens;
+              }
+              if (event.modelUsage && event.modelUsage['claude-sonnet-4-5-20250929']) {
+                tokensUsed = event.modelUsage['claude-sonnet-4-5-20250929'].outputTokens || tokensUsed;
+              }
+              break;
+          }
+        } catch (error) {
+          // Ignore non-JSON lines (don't add them to response)
+          // The verbose output contains many non-JSON debug lines that we should skip
+        }
+      }
+    });
+
+    // Handle stderr
+    claudeProcess.stderr.on('data', (data) => {
+      console.error('Claude CLI stderr:', data.toString());
+    });
+
+    // Wait for process to complete
+    await new Promise((resolve, reject) => {
+      claudeProcess.on('close', (code) => {
+        if (code === 0) {
+          resolve();
+        } else {
+          reject(new Error(`Claude CLI exited with code ${code}`));
+        }
+      });
+
+      claudeProcess.on('error', (error) => {
+        reject(new Error(`Failed to spawn Claude CLI: ${error.message}`));
+      });
+
+      // Send conversation history via stdin if provided
+      if (conversationHistory && conversationHistory.length > 0) {
+        for (const msg of conversationHistory) {
+          const streamEvent = JSON.stringify({
+            type: msg.role === 'user' ? 'user' : 'assistant',
+            content: msg.content
+          }) + '\n';
+          claudeProcess.stdin.write(streamEvent);
+        }
+      }
+
+      // Close stdin to signal we're done sending input
+      claudeProcess.stdin.end();
+    });
 
     // Output response in requested format
     if (format === 'json') {
       console.log(JSON.stringify({
-        message: response,
-        tokensUsed: estimateTokens(message + response),
-        model: 'claude-3-sonnet',
+        message: responseText.trim() || 'No response from Claude',
+        tokensUsed: tokensUsed || estimateTokens(message + responseText),
+        model: model,
         timestamp: new Date().toISOString(),
       }));
     } else {
-      console.log(response);
+      console.log(responseText.trim() || 'No response from Claude');
     }
 
     process.exit(0);
   } catch (error) {
     console.error(`Error: ${error.message}`);
+
+    // Return error as JSON if format is json
+    if (format === 'json') {
+      console.log(JSON.stringify({
+        message: `Error: ${error.message}`,
+        tokensUsed: 0,
+        model: 'error',
+        timestamp: new Date().toISOString(),
+      }));
+    }
+
     process.exit(1);
   }
 }
 
 /**
- * Get project structure (simplified)
- */
-async function getProjectStructure(projectPath) {
-  try {
-    const entries = await fs.readdir(projectPath, { withFileTypes: true });
-    return entries
-      .filter((entry) => !entry.name.startsWith('.') && entry.name !== 'node_modules')
-      .map((entry) => ({
-        name: entry.name,
-        type: entry.isDirectory() ? 'directory' : 'file',
-      }))
-      .slice(0, 20); // Limit to first 20 items
-  } catch (error) {
-    return [];
-  }
-}
-
-/**
- * Simulate Claude response
- * In production, replace with actual Anthropic API call
- */
-async function simulateClaudeResponse(message, context, projectFiles) {
-  const lowerMessage = message.toLowerCase();
-
-  // Basic pattern matching for common queries
-  if (lowerMessage.includes('hello') || lowerMessage.includes('hi')) {
-    return "Hello! I'm Claude Code, your AI development assistant. I can help you with:\n\n" +
-           "- Writing and editing code\n" +
-           "- Debugging and fixing errors\n" +
-           "- Explaining code concepts\n" +
-           "- Refactoring and optimization\n" +
-           "- Adding new features\n\n" +
-           "What would you like to work on today?";
-  }
-
-  if (lowerMessage.includes('file') && lowerMessage.includes('structure')) {
-    const fileList = projectFiles.map((f) => `- ${f.type === 'directory' ? '📁' : '📄'} ${f.name}`).join('\n');
-    return `Here's your project structure:\n\n${fileList}\n\nWhat would you like to do with these files?`;
-  }
-
-  if (lowerMessage.includes('help')) {
-    return "I can assist you with:\n\n" +
-           "1. **Code Writing**: Create new components, functions, or modules\n" +
-           "2. **Code Review**: Analyze and improve existing code\n" +
-           "3. **Debugging**: Find and fix bugs in your code\n" +
-           "4. **Refactoring**: Improve code structure and performance\n" +
-           "5. **Documentation**: Add comments and documentation\n" +
-           "6. **Testing**: Write unit and integration tests\n\n" +
-           "Just describe what you need in natural language!";
-  }
-
-  if (lowerMessage.includes('bug') || lowerMessage.includes('error') || lowerMessage.includes('fix')) {
-    return "I'd be happy to help debug the issue! To assist you better, please:\n\n" +
-           "1. Describe the error or unexpected behavior\n" +
-           "2. Share the relevant code snippet\n" +
-           "3. Provide any error messages you're seeing\n\n" +
-           "I'll analyze the issue and suggest a solution.";
-  }
-
-  if (lowerMessage.includes('create') || lowerMessage.includes('add') || lowerMessage.includes('build')) {
-    return "I can help you create that! To provide the best solution:\n\n" +
-           "1. What are you trying to build?\n" +
-           "2. What framework/language are you using?\n" +
-           "3. Are there any specific requirements or constraints?\n\n" +
-           "Once you provide these details, I'll generate the code for you.";
-  }
-
-  if (lowerMessage.includes('explain') || lowerMessage.includes('what is') || lowerMessage.includes('how does')) {
-    return "I'd be happy to explain! Based on the project context:\n\n" +
-           "Your project appears to be a full-stack application. I can explain:\n" +
-           "- How specific components work\n" +
-           "- Architecture patterns being used\n" +
-           "- Code flow and interactions\n\n" +
-           "What specific part would you like me to explain?";
-  }
-
-  // Default response for unrecognized patterns
-  return `I understand you said: "${message}"\n\n` +
-         "I'm here to help with your development tasks! You can ask me to:\n" +
-         "- Write or modify code\n" +
-         "- Debug issues\n" +
-         "- Explain concepts\n" +
-         "- Review code quality\n" +
-         "- Add new features\n\n" +
-         "Please provide more details about what you'd like me to help with, " +
-         "and I'll do my best to assist you.";
-}
-
-/**
- * Estimate token count
+ * Estimate token count (rough approximation)
  */
 function estimateTokens(text) {
   return Math.ceil(text.length / 4);
