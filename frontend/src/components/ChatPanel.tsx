@@ -20,6 +20,9 @@ interface Message {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
+// Simple unique ID generator
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
 function ChatPanel({ projectId }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -43,6 +46,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
           content: msg.content,
           timestamp: new Date(msg.created_at),
         }));
+        console.log('Loaded messages:', historyMessages.map(m => ({ id: m.id, role: m.role })));
         setMessages(historyMessages);
       } else {
         // No history, show welcome message
@@ -100,7 +104,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
+          id: generateId(),
           role: 'assistant',
           content: data.message,
           timestamp: new Date(),
@@ -117,7 +121,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
+          id: generateId(),
           role: 'system',
           content: `Error: ${data.error}`,
           timestamp: new Date(),
@@ -139,7 +143,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
     if (!input.trim() || !socketRef.current || !isConnected) return;
 
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: generateId(),
       role: 'user',
       content: input,
       timestamp: new Date(),
@@ -199,7 +203,7 @@ function ChatPanel({ projectId }: ChatPanelProps) {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now().toString(),
+          id: generateId(),
           role: 'system',
           content: 'Error: Failed to clear chat history',
           timestamp: new Date(),
