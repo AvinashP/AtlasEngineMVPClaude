@@ -9,12 +9,13 @@ import CodeEditor from './components/CodeEditor';
 import PreviewPanel from './components/PreviewPanel';
 import MemoryPanel from './components/MemoryPanel';
 import ChatPanel from './components/ChatPanel';
+import AdminPanel from './components/AdminPanel';
 import { projectApi } from './services/api';
 import type { Project } from './types';
 
 interface Tab {
   id: string;
-  type: 'file' | 'preview' | 'memory';
+  type: 'file' | 'preview' | 'memory' | 'admin';
   title: string;
   path?: string;
   content?: string;
@@ -33,7 +34,7 @@ function App() {
     loadProjects();
   }, []);
 
-  // Auto-open Preview and Memory tabs when project loads
+  // Auto-open Preview, Memory, and Admin tabs when project loads
   useEffect(() => {
     if (currentProject && tabs.length === 0) {
       const previewTab: Tab = {
@@ -46,7 +47,12 @@ function App() {
         type: 'memory',
         title: 'CLAUDE.md',
       };
-      setTabs([previewTab, memoryTab]);
+      const adminTab: Tab = {
+        id: 'admin',
+        type: 'admin',
+        title: 'Admin',
+      };
+      setTabs([previewTab, memoryTab, adminTab]);
       setActiveTabId('preview');
     }
   }, [currentProject]);
@@ -145,8 +151,8 @@ function App() {
   const handleCloseTab = (tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
 
-    // Don't allow closing Preview and Memory tabs
-    if (tab?.id === 'preview' || tab?.id === 'memory') {
+    // Don't allow closing Preview, Memory, and Admin tabs
+    if (tab?.id === 'preview' || tab?.id === 'memory' || tab?.id === 'admin') {
       return;
     }
 
@@ -284,6 +290,9 @@ function App() {
           )}
           {activeTab?.type === 'memory' && currentProject && (
             <MemoryPanel projectId={currentProject.id} />
+          )}
+          {activeTab?.type === 'admin' && (
+            <AdminPanel />
           )}
           {!activeTab && currentProject && (
             <div className="h-full flex items-center justify-center text-gray-500">
