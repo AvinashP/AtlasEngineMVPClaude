@@ -124,10 +124,10 @@ class ClaudeService extends EventEmitter {
       await logUsage({
         userId: session.userId,
         projectId,
-        resourceType: 'ai_tokens',
+        kind: 'tokens',
         amount: response.tokensUsed || 0,
         cost: (response.tokensUsed || 0) * 0.000001, // Approximate cost
-        metadata: {
+        meta: {
           model: response.model || 'claude-3-sonnet',
           messageLength: message.length,
         },

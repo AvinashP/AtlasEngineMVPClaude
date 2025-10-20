@@ -232,10 +232,17 @@ io.on('connection', (socket) => {
 
       // Initialize session if needed
       if (!claudeService.isSessionActive(projectId)) {
-        // For MVP, use anonymous user ID
-        const userId = '00000000-0000-0000-0000-000000000000';
-        const projectPath = `/var/atlasengine/projects/${projectId}`;
-        await claudeService.initializeSession(projectId, projectPath, userId);
+        // Get project details from database
+        const { getProjectById } = await import('./src/db/queries.js');
+        const project = await getProjectById(projectId);
+
+        if (!project) {
+          socket.emit('ai-error', { error: 'Project not found' });
+          return;
+        }
+
+        // Use project's actual path and user ID
+        await claudeService.initializeSession(projectId, project.path, project.user_id);
       }
 
       // Send message to Claude
