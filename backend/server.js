@@ -468,7 +468,7 @@ io.on('connection', (socket) => {
         // Clean up process from tracking
         activeProcesses.delete(socket.id);
 
-        if (code === 0 || code === null) { // null means killed by signal
+        if (code === 0 || code === null || code === 143) { // null means killed by signal, 143 = SIGTERM (stopped by user)
           // Save assistant message to database with tool use events in meta (only if not killed)
           if (code === 0 && assistantMessage) {
             try {
