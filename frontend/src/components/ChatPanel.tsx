@@ -318,7 +318,12 @@ function ChatPanel({ projectId }: ChatPanelProps) {
   };
 
   const handleStop = () => {
-    // Stop current processing
+    if (!socketRef.current) return;
+
+    // Send stop signal to backend
+    socketRef.current.emit('ai-stop', { projectId });
+
+    // Update UI state
     setIsProcessing(false);
     setIsTyping(false);
     setCurrentActivity('');
@@ -333,9 +338,6 @@ function ChatPanel({ projectId }: ChatPanelProps) {
         timestamp: new Date(),
       },
     ]);
-
-    // Note: In a real implementation, we'd send a stop signal to the backend
-    // For now, this just updates the UI state
   };
 
   return (

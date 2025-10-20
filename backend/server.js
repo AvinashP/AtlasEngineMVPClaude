@@ -248,6 +248,9 @@ app.use((err, req, res, next) => {
 // WEBSOCKET
 // ============================================================================
 
+// Track active Claude processes per socket
+const activeProcesses = new Map(); // socketId -> { process, projectId }
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
@@ -261,6 +264,22 @@ io.on('connection', (socket) => {
   socket.on('leave-project', (projectId) => {
     socket.leave(`project-${projectId}`);
     console.log(`Socket ${socket.id} left project ${projectId}`);
+  });
+
+  // Stop current AI processing
+  socket.on('ai-stop', (data) => {
+    const { projectId } = data;
+    console.log(`Stop requested for socket ${socket.id}, project ${projectId}`);
+
+    const processInfo = activeProcesses.get(socket.id);
+    if (processInfo && processInfo.process) {
+      console.log(`Killing Claude process for socket ${socket.id}`);
+      processInfo.process.kill('SIGTERM');
+      activeProcesses.delete(socket.id);
+
+      socket.emit('ai-stopped', { projectId });
+      socket.to(`project-${projectId}`).emit('ai-stopped', { projectId });
+    }
   });
 
   // AI chat message handler with streaming support
@@ -339,6 +358,9 @@ io.on('connection', (socket) => {
         cwd: session.projectPath,
         stdio: ['pipe', 'pipe', 'pipe']
       });
+
+      // Register process for stopping
+      activeProcesses.set(socket.id, { process: claudeProcess, projectId });
 
       let assistantMessage = '';
       let tokensUsed = 0;
@@ -443,21 +465,26 @@ io.on('connection', (socket) => {
 
       // Handle process completion
       claudeProcess.on('close', async (code) => {
-        if (code === 0) {
-          // Save assistant message to database with tool use events in meta
-          try {
-            const meta = toolUseEvents.length > 0 ? { toolUseEvents } : null;
-            await saveChatMessage({
-              projectId,
-              userId: project.user_id,
-              role: 'assistant',
-              content: assistantMessage || 'No response',
-              tokensUsed: tokensUsed || 0,
-              model: model,
-              meta: meta,
-            });
-          } catch (error) {
-            console.error('Failed to save assistant message:', error.message);
+        // Clean up process from tracking
+        activeProcesses.delete(socket.id);
+
+        if (code === 0 || code === null) { // null means killed by signal
+          // Save assistant message to database with tool use events in meta (only if not killed)
+          if (code === 0 && assistantMessage) {
+            try {
+              const meta = toolUseEvents.length > 0 ? { toolUseEvents } : null;
+              await saveChatMessage({
+                projectId,
+                userId: project.user_id,
+                role: 'assistant',
+                content: assistantMessage || 'No response',
+                tokensUsed: tokensUsed || 0,
+                model: model,
+                meta: meta,
+              });
+            } catch (error) {
+              console.error('Failed to save assistant message:', error.message);
+            }
           }
 
           // Send completion event
