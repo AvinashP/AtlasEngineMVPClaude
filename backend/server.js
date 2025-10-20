@@ -109,12 +109,12 @@ if (NODE_ENV === 'development') {
 
 // Mock authentication middleware (replace with real JWT auth)
 app.use((req, res, next) => {
-  // For MVP, we'll use a mock user
-  // In production, this would verify JWT tokens
+  // For MVP, we use anonymous user by default (no auth required)
+  // In production, this would verify JWT tokens and set req.user
   if (req.headers.authorization) {
     req.user = {
-      id: 'test-user-id',
-      email: 'test@atlasengine.dev'
+      id: '00000000-0000-0000-0000-000000000000',
+      email: 'anonymous@atlasengine.local'
     };
   }
   next();
@@ -232,8 +232,8 @@ io.on('connection', (socket) => {
 
       // Initialize session if needed
       if (!claudeService.isSessionActive(projectId)) {
-        // For MVP, use mock user ID - replace with actual auth
-        const userId = 'test-user-id';
+        // For MVP, use anonymous user ID
+        const userId = '00000000-0000-0000-0000-000000000000';
         const projectPath = `/var/atlasengine/projects/${projectId}`;
         await claudeService.initializeSession(projectId, projectPath, userId);
       }
