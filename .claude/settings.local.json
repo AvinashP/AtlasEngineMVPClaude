@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tree -L 3 -I 'node_modules' /Users/avinash/Projects/AI/AtlasEngineMVP)",
+      "Bash(chmod +x /Users/avinash/Projects/AI/AtlasEngineMVP/backend/scripts/init-db.sh)",
+      "Bash(chmod +x /Users/avinash/Projects/AI/AtlasEngineMVP/backend/src/scripts/claude-wrapper.js)",
+      "Bash(chmod +x /Users/avinash/Projects/AI/AtlasEngineMVP/test-e2e.sh)",
+      "Bash(command -v jq)",
+      "Bash(/dev/null)",
+      "Bash(docker --version)",
+      "Bash(psql --version)",
+      "Bash(docker network ls)",
+      "Bash(node --version)",
+      "Bash(brew list postgresql@14)",
+      "Bash(pg_isready -U avinash)",
+      "Bash(brew services list)",
+      "Bash(psql -U avinash -d postgres -c \"SELECT 1 FROM pg_database WHERE datname = ''atlasengine_dev''\" -t)",
+      "Bash(psql -U avinash -d atlasengine_dev -c \"\\dt\")",
+      "Bash(curl http://localhost:3000/health)",
+      "Bash(curl -X POST http://localhost:3000/api/projects -H \"Content-Type: application/json\" -d '{\"\"\"\"name\"\"\"\": \"\"\"\"Test Project\"\"\"\", \"\"\"\"description\"\"\"\": \"\"\"\"Testing API\"\"\"\", \"\"\"\"framework\"\"\"\": \"\"\"\"react\"\"\"\", \"\"\"\"language\"\"\"\": \"\"\"\"typescript\"\"\"\"}')",
+      "Bash(curl -X POST http://localhost:3000/api/projects -H \"Content-Type: application/json\" -d '{\"\"\"\"name\"\"\"\": \"\"\"\"Test Project\"\"\"\", \"\"\"\"description\"\"\"\": \"\"\"\"Testing API\"\"\"\", \"\"\"\"framework\"\"\"\": \"\"\"\"react\"\"\"\", \"\"\"\"language\"\"\"\": \"\"\"\"typescript\"\"\"\"}' -v)",
+      "Bash(curl -X POST http://localhost:3000/api/projects -H \"Content-Type: application/json\" -d '{\"\"name\"\":\"\"Test\"\",\"\"framework\"\":\"\"react\"\"}')",
+      "Bash(git init)",
+      "Bash(git remote add origin https://github.com/AvinashP/AtlasEngineMVPClaude.git)",
+      "Bash(git branch -M main)",
+      "Bash(git add .)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
