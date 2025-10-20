@@ -381,6 +381,28 @@ class ClaudeService extends EventEmitter {
     const session = this.sessions.get(projectId);
     return session ? session.isActive : false;
   }
+
+  /**
+   * Get all active sessions
+   * @returns {Array} List of active sessions with stats
+   */
+  getAllSessions() {
+    const sessions = [];
+    for (const [projectId, session] of this.sessions.entries()) {
+      sessions.push({
+        projectId,
+        userId: session.userId,
+        projectPath: session.projectPath,
+        isActive: session.isActive,
+        messageCount: session.messageCount,
+        tokensUsed: session.tokensUsed,
+        startTime: session.startTime,
+        lastActivity: session.lastActivity,
+        uptime: Date.now() - session.startTime,
+      });
+    }
+    return sessions;
+  }
 }
 
 // Export singleton instance

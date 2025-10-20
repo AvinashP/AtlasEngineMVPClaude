@@ -185,6 +185,47 @@ app.get('/api/admin/docker', async (req, res) => {
   }
 });
 
+// Claude sessions stats (admin only in production)
+app.get('/api/admin/claude-sessions', (req, res) => {
+  try {
+    const sessions = claudeService.getAllSessions();
+
+    res.json({
+      totalSessions: sessions.length,
+      activeSessions: sessions.filter(s => s.isActive).length,
+      sessions: sessions.map(s => ({
+        ...s,
+        uptimeFormatted: formatUptime(s.uptime),
+        lastActivityRelative: formatRelativeTime(s.lastActivity),
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Helper functions for formatting
+function formatUptime(ms) {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+  return `${seconds}s`;
+}
+
+function formatRelativeTime(timestamp) {
+  const diff = Date.now() - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return `${seconds}s ago`;
+}
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
