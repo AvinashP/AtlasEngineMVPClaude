@@ -30,7 +30,8 @@ const PROJECTS_DIR = process.env.PROJECTS_DIR || path.join(process.cwd(), '../pr
 router.post('/', enforceQuotas, async (req, res) => {
   try {
     const { name, description, framework, language } = req.body;
-    const userId = req.user?.id;
+    // For MVP: Use anonymous user if not authenticated
+    const userId = req.user?.id || '00000000-0000-0000-0000-000000000000';
 
     if (!name) {
       return res.status(400).json({ error: 'Project name is required' });
@@ -40,7 +41,7 @@ router.post('/', enforceQuotas, async (req, res) => {
     const sessionId = uuidv4();
 
     // Create project directory
-    const projectPath = path.join(PROJECTS_DIR, `${userId || 'anonymous'}_${sessionId}`);
+    const projectPath = path.join(PROJECTS_DIR, `${userId === '00000000-0000-0000-0000-000000000000' ? 'anonymous' : userId}_${sessionId}`);
     await fs.mkdir(projectPath, { recursive: true });
 
     // Create project in database
@@ -90,13 +91,12 @@ router.get('/', enforceQuotas, async (req, res) => {
   try {
     const userId = req.user?.id;
 
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
+    // For MVP: Use anonymous user if not authenticated
+    const effectiveUserId = userId || '00000000-0000-0000-0000-000000000000';
 
     const { limit = 50, offset = 0, status = 'active' } = req.query;
 
-    const projects = await getUserProjects(userId, {
+    const projects = await getUserProjects(effectiveUserId, {
       limit: parseInt(limit),
       offset: parseInt(offset),
       status
