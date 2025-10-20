@@ -517,6 +517,109 @@ export async function getRecentEvents({ userId, projectId, kind, limit = 50 } = 
   return result.rows;
 }
 
+// ============================================================================
+// CHAT MESSAGE QUERIES
+// ============================================================================
+
+/**
+ * Save a chat message to database
+ * @param {Object} messageData - Message data
+ * @returns {Promise<Object>} Saved message
+ */
+export async function saveChatMessage({
+  projectId,
+  userId,
+  role,
+  content,
+  tokensUsed = 0,
+  model = null,
+  meta = null
+}) {
+  const result = await query(
+    `INSERT INTO chat_messages (project_id, user_id, role, content, tokens_used, model, meta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING *`,
+    [projectId, userId, role, content, tokensUsed, model, meta]
+  );
+
+  return result.rows[0];
+}
+
+/**
+ * Get chat history for a project
+ * @param {string} projectId - Project UUID
+ * @param {number} limit - Number of messages to return
+ * @param {number} offset - Offset for pagination
+ * @returns {Promise<Array>} Chat messages
+ */
+export async function getChatHistory(projectId, limit = 50, offset = 0) {
+  const result = await query(
+    `SELECT * FROM chat_messages
+     WHERE project_id = $1 AND is_deleted = FALSE
+     ORDER BY created_at ASC
+     LIMIT $2 OFFSET $3`,
+    [projectId, limit, offset]
+  );
+
+  return result.rows;
+}
+
+/**
+ * Clear chat history for a project (soft delete)
+ * @param {string} projectId - Project UUID
+ * @returns {Promise<number>} Number of messages deleted
+ */
+export async function clearChatHistory(projectId) {
+  const result = await query(
+    `UPDATE chat_messages
+     SET is_deleted = TRUE
+     WHERE project_id = $1 AND is_deleted = FALSE
+     RETURNING id`,
+    [projectId]
+  );
+
+  return result.rowCount;
+}
+
+/**
+ * Get chat statistics for a project
+ * @param {string} projectId - Project UUID
+ * @returns {Promise<Object>} Chat statistics
+ */
+export async function getChatStats(projectId) {
+  const result = await query(
+    `SELECT * FROM chat_stats_by_project WHERE project_id = $1`,
+    [projectId]
+  );
+
+  return result.rows[0] || {
+    project_id: projectId,
+    total_messages: 0,
+    user_messages: 0,
+    assistant_messages: 0,
+    total_tokens: 0,
+    first_message_at: null,
+    last_message_at: null
+  };
+}
+
+/**
+ * Delete a specific chat message (soft delete)
+ * @param {string} messageId - Message UUID
+ * @returns {Promise<boolean>} Success
+ */
+export async function deleteChatMessage(messageId) {
+  const result = await query(
+    `UPDATE chat_messages
+     SET is_deleted = TRUE
+     WHERE id = $1 AND is_deleted = FALSE
+     RETURNING id`,
+    [messageId]
+  );
+
+  return result.rowCount > 0;
+}
+
 // Export all functions
 export default {
   // Users
@@ -559,5 +662,12 @@ export default {
 
   // Events
   logEvent,
-  getRecentEvents
+  getRecentEvents,
+
+  // Chat
+  saveChatMessage,
+  getChatHistory,
+  clearChatHistory,
+  getChatStats,
+  deleteChatMessage
 };

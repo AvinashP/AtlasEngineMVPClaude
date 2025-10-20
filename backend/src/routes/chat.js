@@ -5,7 +5,12 @@
 
 import express from 'express';
 import claudeService from '../services/claudeService.js';
-import { getProjectById } from '../db/queries.js';
+import {
+  getProjectById,
+  getChatHistory,
+  clearChatHistory,
+  getChatStats
+} from '../db/queries.js';
 import logger from '../utils/logger.js';
 
 const router = express.Router();
@@ -85,14 +90,16 @@ router.post('/sessions/:projectId/message', async (req, res) => {
 
 /**
  * GET /api/chat/sessions/:projectId/history
- * Get message history for a session
+ * Get message history for a session (from database)
  */
 router.get('/sessions/:projectId/history', async (req, res) => {
   try {
     const { projectId } = req.params;
     const limit = parseInt(req.query.limit) || 50;
+    const offset = parseInt(req.query.offset) || 0;
 
-    const history = claudeService.getMessageHistory(projectId, limit);
+    // Get persistent history from database
+    const history = await getChatHistory(projectId, limit, offset);
 
     res.json({
       success: true,
@@ -107,17 +114,22 @@ router.get('/sessions/:projectId/history', async (req, res) => {
 
 /**
  * DELETE /api/chat/sessions/:projectId/history
- * Clear message history for a session
+ * Clear message history for a session (both database and in-memory)
  */
 router.delete('/sessions/:projectId/history', async (req, res) => {
   try {
     const { projectId } = req.params;
 
+    // Clear in-memory history
     claudeService.clearHistory(projectId);
+
+    // Clear persistent history from database
+    const deletedCount = await clearChatHistory(projectId);
 
     res.json({
       success: true,
       message: 'Message history cleared',
+      deletedCount,
     });
   } catch (error) {
     logger.error(`Failed to clear message history: ${error.message}`);
@@ -127,21 +139,26 @@ router.delete('/sessions/:projectId/history', async (req, res) => {
 
 /**
  * GET /api/chat/sessions/:projectId/stats
- * Get session statistics
+ * Get session statistics (from database and active session)
  */
 router.get('/sessions/:projectId/stats', async (req, res) => {
   try {
     const { projectId } = req.params;
 
-    const stats = claudeService.getSessionStats(projectId);
+    // Get persistent stats from database
+    const dbStats = await getChatStats(projectId);
 
-    if (!stats) {
-      return res.status(404).json({ success: false, error: 'Session not found' });
-    }
+    // Get active session stats if session exists
+    const sessionStats = claudeService.getSessionStats(projectId);
 
     res.json({
       success: true,
-      stats,
+      stats: {
+        // Persistent stats (database)
+        persistent: dbStats,
+        // Active session stats (in-memory)
+        session: sessionStats,
+      },
     });
   } catch (error) {
     logger.error(`Failed to get session stats: ${error.message}`);

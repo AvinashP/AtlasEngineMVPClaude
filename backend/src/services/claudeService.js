@@ -9,7 +9,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import logger from '../utils/logger.js';
 import memoryService from './memoryService.js';
-import { getUserQuotas, logUsage } from '../db/queries.js';
+import { getUserQuotas, logUsage, saveChatMessage } from '../db/queries.js';
 
 class ClaudeService extends EventEmitter {
   constructor() {
@@ -97,11 +97,28 @@ class ClaudeService extends EventEmitter {
       }
 
       // Add user message to history
-      session.messageHistory.push({
+      const userMessage = {
         role: 'user',
         content: message,
         timestamp: new Date(),
-      });
+      };
+      session.messageHistory.push(userMessage);
+
+      // Persist user message to database
+      try {
+        await saveChatMessage({
+          projectId,
+          userId: session.userId,
+          role: 'user',
+          content: message,
+          tokensUsed: 0, // User messages don't consume tokens
+          model: null,
+          meta: null,
+        });
+      } catch (error) {
+        logger.error(`Failed to save user message to database: ${error.message}`);
+        // Continue even if database save fails
+      }
 
       // Emit typing event
       this.emit('ai-typing', { projectId });
@@ -110,11 +127,28 @@ class ClaudeService extends EventEmitter {
       const response = await this._executeClaudeCommand(projectId, message, options);
 
       // Add assistant response to history
-      session.messageHistory.push({
+      const assistantMessage = {
         role: 'assistant',
         content: response.content,
         timestamp: new Date(),
-      });
+      };
+      session.messageHistory.push(assistantMessage);
+
+      // Persist assistant message to database
+      try {
+        await saveChatMessage({
+          projectId,
+          userId: session.userId,
+          role: 'assistant',
+          content: response.content,
+          tokensUsed: response.tokensUsed || 0,
+          model: response.model || 'claude-3-sonnet',
+          meta: null,
+        });
+      } catch (error) {
+        logger.error(`Failed to save assistant message to database: ${error.message}`);
+        // Continue even if database save fails
+      }
 
       // Update session stats
       session.messageCount++;

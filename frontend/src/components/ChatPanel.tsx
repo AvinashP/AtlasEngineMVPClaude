@@ -1,10 +1,11 @@
 /**
  * Chat Panel Component
- * Chat interface for Claude Code interaction
+ * Chat interface for Claude Code interaction with persistent history
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import axios from 'axios';
 
 interface ChatPanelProps {
   projectId: string;
@@ -17,13 +18,58 @@ interface Message {
   timestamp: Date;
 }
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+
 function ChatPanel({ projectId }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load chat history from database
+  const loadHistory = async () => {
+    try {
+      setIsLoadingHistory(true);
+      const response = await axios.get(`${API_BASE_URL}/chat/sessions/${projectId}/history`);
+
+      if (response.data.success && response.data.messages.length > 0) {
+        // Convert database messages to UI format
+        const historyMessages: Message[] = response.data.messages.map((msg: any) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.created_at),
+        }));
+        setMessages(historyMessages);
+      } else {
+        // No history, show welcome message
+        setMessages([
+          {
+            id: 'welcome',
+            role: 'system',
+            content: 'Connected to Claude Code. Ask me anything about your project!',
+            timestamp: new Date(),
+          },
+        ]);
+      }
+    } catch (error) {
+      console.error('Failed to load chat history:', error);
+      // Show welcome message on error
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'system',
+          content: 'Connected to Claude Code. Ask me anything about your project!',
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
 
   useEffect(() => {
     // Initialize Socket.IO connection
@@ -41,15 +87,8 @@ function ChatPanel({ projectId }: ChatPanelProps) {
       setIsConnected(true);
       socket.emit('join-project', projectId);
 
-      // Add welcome message
-      setMessages([
-        {
-          id: Date.now().toString(),
-          role: 'system',
-          content: 'Connected to Claude Code. Ask me anything about your project!',
-          timestamp: new Date(),
-        },
-      ]);
+      // Load chat history from database
+      loadHistory();
     });
 
     socket.on('disconnect', () => {
@@ -140,22 +179,67 @@ function ChatPanel({ projectId }: ChatPanelProps) {
     return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const handleClearChat = async () => {
+    if (!confirm('Are you sure you want to clear all chat history? This cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await axios.delete(`${API_BASE_URL}/chat/sessions/${projectId}/history`);
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'system',
+          content: 'Chat history cleared. Start a new conversation!',
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (error) {
+      console.error('Failed to clear chat history:', error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'system',
+          content: 'Error: Failed to clear chat history',
+          timestamp: new Date(),
+        },
+      ]);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-gray-800">
       {/* Header */}
       <div className="p-4 border-b border-gray-700 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Claude Code Chat</h2>
-        <div className="flex items-center gap-2">
-          <div
-            className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}
-          ></div>
-          <span className="text-xs text-gray-400">{isConnected ? 'Connected' : 'Disconnected'}</span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleClearChat}
+            disabled={messages.length === 0 || isLoadingHistory}
+            className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded"
+            title="Clear chat history"
+          >
+            Clear
+          </button>
+          <div className="flex items-center gap-2">
+            <div
+              className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}
+            ></div>
+            <span className="text-xs text-gray-400">{isConnected ? 'Connected' : 'Disconnected'}</span>
+          </div>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-auto p-4 space-y-3">
-        {messages.length === 0 && (
+        {isLoadingHistory && (
+          <div className="text-center text-gray-500 text-sm mt-8">
+            <p className="mb-2">Loading chat history...</p>
+          </div>
+        )}
+
+        {!isLoadingHistory && messages.length === 0 && (
           <div className="text-center text-gray-500 text-sm mt-8">
             <p className="mb-2">No messages yet</p>
             <p className="text-xs">
