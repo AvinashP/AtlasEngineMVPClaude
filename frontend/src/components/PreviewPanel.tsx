@@ -3,25 +3,41 @@
  * Displays app preview with build/deploy controls
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { projectApi, previewApi, buildApi } from '@/services/api';
 import type { Preview, Build } from '@/types';
 
 interface PreviewPanelProps {
   projectId: string;
+  refreshKey?: number; // Increment this to trigger iframe reload
 }
 
-function PreviewPanel({ projectId }: PreviewPanelProps) {
+function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [builds, setBuilds] = useState<Build[]>([]);
   const [loading, setLoading] = useState(false);
   const [buildLogs, setBuildLogs] = useState<string>('');
   const [showLogs, setShowLogs] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     loadPreview();
     loadBuilds();
   }, [projectId]);
+
+  // Reload iframe when files change
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0 && iframeRef.current) {
+      console.log('Refreshing preview iframe due to file changes');
+      // Force iframe reload
+      const iframe = iframeRef.current;
+      const currentSrc = iframe.src;
+      iframe.src = 'about:blank';
+      setTimeout(() => {
+        iframe.src = currentSrc;
+      }, 100);
+    }
+  }, [refreshKey]);
 
   const loadPreview = async () => {
     try {
@@ -206,6 +222,7 @@ function PreviewPanel({ projectId }: PreviewPanelProps) {
       <div className="flex-1 bg-white">
         {preview && preview.status === 'healthy' ? (
           <iframe
+            ref={iframeRef}
             src={preview.url}
             className="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"

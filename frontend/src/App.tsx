@@ -35,6 +35,9 @@ function App() {
   const [isResizingLeft, setIsResizingLeft] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
 
+  // File change tracking - increment this to trigger refreshes
+  const [fileChangeCounter, setFileChangeCounter] = useState(0);
+
   // Load projects on mount
   useEffect(() => {
     loadProjects();
@@ -213,6 +216,12 @@ function App() {
     }
   };
 
+  const handleFileChange = () => {
+    // Increment counter to trigger refreshes in FileTree and PreviewPanel
+    setFileChangeCounter((prev) => prev + 1);
+    console.log('File change detected - refreshing UI components');
+  };
+
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
   return (
@@ -251,7 +260,11 @@ function App() {
         </div>
         <div className="flex-1 overflow-auto">
           {currentProject ? (
-            <FileTree projectId={currentProject.id} onSelectFile={handleSelectFile} />
+            <FileTree
+              key={`filetree-${currentProject.id}-${fileChangeCounter}`}
+              projectId={currentProject.id}
+              onSelectFile={handleSelectFile}
+            />
           ) : (
             <div className="p-4 text-gray-500 text-sm">
               No project selected
@@ -333,7 +346,10 @@ function App() {
             </div>
           )}
           {activeTab?.type === 'preview' && currentProject && (
-            <PreviewPanel projectId={currentProject.id} />
+            <PreviewPanel
+              projectId={currentProject.id}
+              refreshKey={fileChangeCounter}
+            />
           )}
           {activeTab?.type === 'memory' && currentProject && (
             <MemoryPanel projectId={currentProject.id} />
@@ -372,7 +388,10 @@ function App() {
         style={{ width: `${rightPanelWidth}px` }}
       >
         {currentProject ? (
-          <ChatPanel projectId={currentProject.id} />
+          <ChatPanel
+            projectId={currentProject.id}
+            onFileChange={handleFileChange}
+          />
         ) : (
           <div className="h-full flex items-center justify-center text-gray-500">
             <div className="text-center">

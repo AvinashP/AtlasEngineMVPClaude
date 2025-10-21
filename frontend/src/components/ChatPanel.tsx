@@ -9,6 +9,7 @@ import axios from 'axios';
 
 interface ChatPanelProps {
   projectId: string;
+  onFileChange?: () => void; // Callback when files are modified
 }
 
 interface Message {
@@ -28,7 +29,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 // Simple unique ID generator
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-function ChatPanel({ projectId }: ChatPanelProps) {
+function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isConnected, setIsConnected] = useState(false);
@@ -185,6 +186,15 @@ function ChatPanel({ projectId }: ChatPanelProps) {
             toolId: data.data.id,
           },
         ]);
+
+        // Check if this is a file operation tool
+        const fileOperationTools = ['Write', 'Edit', 'NotebookEdit'];
+        if (fileOperationTools.includes(data.data.name)) {
+          // Notify parent component that files have changed
+          if (onFileChange) {
+            onFileChange();
+          }
+        }
       }
     });
 

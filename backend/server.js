@@ -344,13 +344,26 @@ io.on('connection', (socket) => {
       const { randomUUID } = await import('crypto');
       const sessionId = randomUUID();
 
+      // Prepend system instructions to keep Claude within project directory
+      const systemInstruction = `IMPORTANT SYSTEM INSTRUCTION: You are working on a user project located at: ${session.projectPath}
+
+You MUST ONLY read, write, or modify files within this directory. DO NOT access or modify any files outside of this directory, including:
+- The AtlasEngine MVP codebase at /Users/avinash/Projects/AI/AtlasEngineMVP
+- Any system files
+- Any files in parent directories
+
+Your working directory is: ${session.projectPath}
+Always use relative paths when working with files.
+
+User's request: ${message}`;
+
       const claudeArgs = [
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
         '--dangerously-skip-permissions',
         '--session-id', sessionId,
-        message
+        systemInstruction
       ];
 
       const claudePath = '/opt/homebrew/bin/claude';
