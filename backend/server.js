@@ -391,7 +391,6 @@ User's request: ${message}`;
         '--verbose',
         '--dangerously-skip-permissions',
         '--session-id', sessionId,
-        '--project', session.projectPath,  // Explicitly tell Claude this is a project (enables CLAUDE.md auto-loading)
         systemInstruction
       ];
 
