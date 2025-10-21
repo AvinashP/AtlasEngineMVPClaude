@@ -251,8 +251,11 @@ function App() {
 
   const handleFileChange = () => {
     // Increment counter to trigger refreshes in FileTree and PreviewPanel
-    setFileChangeCounter((prev) => prev + 1);
-    console.log('File change detected - refreshing UI components');
+    setFileChangeCounter((prev) => {
+      const newCounter = prev + 1;
+      console.log(`🔔 File change detected - refreshing UI components (counter: ${prev} → ${newCounter})`);
+      return newCounter;
+    });
   };
 
   const activeTab = tabs.find((tab) => tab.id === activeTabId);

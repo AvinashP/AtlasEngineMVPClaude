@@ -41,6 +41,7 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileOperationsOccurredRef = useRef(false);
 
   // Load chat history from database
   const loadHistory = async () => {
@@ -190,13 +191,10 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
           },
         ]);
 
-        // Check if this is a file operation tool
+        // Track if this is a file operation tool
         const fileOperationTools = ['Write', 'Edit', 'NotebookEdit'];
         if (fileOperationTools.includes(data.data.name)) {
-          // Notify parent component that files have changed
-          if (onFileChange) {
-            onFileChange();
-          }
+          fileOperationsOccurredRef.current = true;
         }
       }
     });
@@ -217,6 +215,17 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
         }
         return updated;
       });
+
+      // If file operations occurred, notify parent with a small delay to ensure files are written
+      if (fileOperationsOccurredRef.current) {
+        console.log('File operations detected - triggering preview refresh');
+        setTimeout(() => {
+          if (onFileChange) {
+            onFileChange();
+          }
+        }, 500); // 500ms delay to ensure files are fully written to disk
+        fileOperationsOccurredRef.current = false; // Reset for next request
+      }
     });
 
     // Keep old ai-response handler for backward compatibility
@@ -263,6 +272,9 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
 
   const handleSend = () => {
     if (!input.trim() || !socketRef.current || !isConnected) return;
+
+    // Reset file operations flag for new request
+    fileOperationsOccurredRef.current = false;
 
     const userMessage: Message = {
       id: generateId(),

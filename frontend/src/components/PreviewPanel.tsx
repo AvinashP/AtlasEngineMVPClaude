@@ -29,13 +29,15 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   // Reload iframe when files change
   useEffect(() => {
     if (refreshKey !== undefined && refreshKey > 0 && iframeRef.current) {
-      console.log('Refreshing preview iframe due to file changes');
+      console.log(`🔄 Refreshing preview iframe (refreshKey: ${refreshKey})`);
       // Force iframe reload
       const iframe = iframeRef.current;
       const currentSrc = iframe.src;
+      console.log(`📍 Current iframe src: ${currentSrc}`);
       iframe.src = 'about:blank';
       setTimeout(() => {
         iframe.src = currentSrc;
+        console.log(`✅ Preview iframe reloaded`);
       }, 100);
     }
   }, [refreshKey]);
