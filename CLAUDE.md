@@ -41,11 +41,43 @@ AtlasEngine is an AI-powered full-stack development platform with persistent mem
 - Comments: Inline comments for complex logic, JSDoc for function documentation
 
 ## Current Status
-Last updated: 2025-10-20T08:40:00Z
+Last updated: 2025-10-21T12:30:00Z
 
-**🎉 DEVELOPMENT COMPLETE - READY FOR TESTING**
+**✅ MVP CORE FEATURES: 13/18 COMPLETE (72%)**
 
-All core features have been implemented. System is ready for environment setup and end-to-end testing.
+Phase 1 MVP progress against Planning/atlas-mvp-plan.md checklist:
+
+**✅ Completed (13/18):**
+1. Custom frontend (React+TypeScript, NOT ClaudeCodeUI fork)
+2. Chat with Claude Code to build apps (streaming + tool visibility)
+3. CLAUDE.md memory system (init/update/checkpoint/stats)
+4. File tree + code editor (Monaco)
+5. Live preview system (static + Docker previews with auto-refresh)
+6. Docker-based deployment (builder/runner split with security hardening)
+8. Project persistence (PostgreSQL with full schema)
+10. Memory persistence across sessions (CLAUDE.md + snapshots)
+11. ENFORCED resource quotas (hard stops via middleware)
+12. Rate limiting & cost tracking (usage ledger)
+13. Container security hardening (non-root, read-only FS, seccomp, etc.)
+14. Port allocator + health checks (/health endpoint)
+15. Minimal observability (events table + Winston structured logs)
+
+**⚠️ Partial (1/18):**
+7. Build orchestration (works but no Redis queue - builds execute directly)
+
+**❌ Pending (4/18):**
+9. Session management (JWT auth - currently mock auth)
+16. Janitor service (nightly cleanup of containers/images/volumes)
+17. Starter templates (Next.js, Vite+React, Express, Flask)
+18. Debug surface (/debug page for ops)
+
+**Recent Enhancements (2025-10-21):**
+- ✅ Auto-refresh system for file explorer and preview on file changes
+- ✅ Claude directory restriction system (prevents AI from modifying AtlasEngine codebase)
+- ✅ Static file preview server (serves HTML/CSS/JS directly from project directories)
+- ✅ Loading indicator persistence (shows activity while Claude processes)
+
+System is functional and ready for continued development.
 
 **Completed - Backend (100%):**
 - ✅ Project planning and architecture design
@@ -116,16 +148,26 @@ All core features have been implemented. System is ready for environment setup a
 - ⚠️ See QUICK_START.md or READY_TO_TEST.md for setup instructions
 - ⚠️ Run ./test-e2e.sh after setup to validate complete flow
 
-**Future Enhancements (Post-MVP):**
+**Next Priorities (To Complete Phase 1 MVP):**
 - 📋 Implement JWT authentication system (currently using mock auth)
-- 📋 Configure Caddy reverse proxy with wildcard SSL and origin isolation
-- 📋 Create Docker network isolation setup (atlasengine-internal network exists but not fully configured)
 - 📋 Implement starter templates (Next.js, Vite+React, Express, Flask)
 - 📋 Create janitor service for cleanup of containers/images/volumes
+- 📋 Build debug surface (/debug page for ops)
+- 📋 Add Redis queue for build orchestration (currently builds execute directly)
+
+**Production Deployment (Post-MVP):**
+- 📋 Configure Caddy reverse proxy with wildcard SSL and origin isolation
+- 📋 Complete Docker network isolation setup (atlasengine-internal network partially configured)
 - 📋 Replace simulated Claude wrapper with real Anthropic API integration
-- 📋 Add streaming responses for Claude chat
+- 📋 Set up Oracle Cloud Free Tier deployment
+- 📋 Configure PM2 process management
+
+**Future Enhancements (Phase 2):**
 - 📋 Implement conversation branching and history navigation
 - 📋 Add collaborative editing (multi-user)
+- 📋 Project sharing with owner/viewer roles
+- 📋 Advanced monitoring dashboards (Loki/Grafana)
+- 📋 Stripe metered billing integration
 
 ## Project Structure
 ```
@@ -325,6 +367,40 @@ Frontend (planned):
   - WebSocket rooms for project-specific events
   - ~350 lines
 - **17:55**: ✅ STEP 4 COMPLETE - Backend API fully functional
+
+### Session 5: UX Improvements & Progress Review (2025-10-21)
+- **07:00**: Implemented auto-refresh system for file explorer and preview panels
+  - Added fileChangeCounter state in App.tsx
+  - Implemented onFileChange callback propagation from ChatPanel
+  - Detected file operation tools (Write, Edit, NotebookEdit) in Socket.IO stream
+  - Used React key prop to force FileTree re-mount on changes
+  - Added iframe reload logic in PreviewPanel with refreshKey prop
+  - Committed changes (e63bce8)
+- **08:00**: Fixed Claude directory restriction issue
+  - User noticed Claude added continue button to its own code (ChatPanel.tsx)
+  - Reverted self-modifications to ChatPanel
+  - Added system instructions in backend/server.js to restrict Claude to project directory only
+  - System instructions prepended to every chat message to enforce working directory boundaries
+  - Prevents AI from modifying AtlasEngine codebase
+  - Committed changes (e63bce8)
+- **09:00**: Implemented static file preview server
+  - Added Express static middleware route `/preview/:projectId` in backend/server.js
+  - Serves HTML/CSS/JS files directly from project directories
+  - PreviewPanel now shows static preview by default (no build/deploy needed)
+  - Docker-based preview only used after explicit build/deploy
+  - Enables instant preview of static HTML projects
+  - Committed changes (f419c30)
+- **10:00**: Fixed loading indicator persistence
+  - Removed premature `setIsTyping(false)` from stream event handler
+  - Loading dots now persist until claude-complete or claude-error event
+  - Improves UX by showing continuous activity while Claude processes
+  - Committed changes (f419c30)
+- **12:30**: Reviewed progress against original plan (Planning/atlas-mvp-plan.md)
+  - Compared completed features vs. Phase 1 MVP checklist (18 items)
+  - Updated CLAUDE.md with progress tracking: 13/18 complete (72%)
+  - Identified 4 remaining MVP features: JWT auth, janitor, templates, debug page
+  - Reorganized future enhancements into clear priorities
+- **12:30**: ✅ SESSION 5 COMPLETE - UX improvements and progress tracking updated
 
 ## Additional Context
 - Reference planning document: `Planning/atlas-mvp-plan.md`
