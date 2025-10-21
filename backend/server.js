@@ -20,6 +20,8 @@ import db from './src/db/connection.js';
 import dockerService from './src/services/dockerService.js';
 import portRegistry from './src/services/portRegistry.js';
 import claudeService from './src/services/claudeService.js';
+// import claudeServiceSDK from './src/services/claudeServiceSDK.js'; // SDK approach didn't work - using direct CLI instead
+import jsonlSyncJob from './src/jobs/jsonlSync.js';
 
 // Import middleware
 import { enforceQuotas, getQuotaSummary } from './src/middleware/quotas.js';
@@ -204,6 +206,29 @@ app.get('/api/admin/claude-sessions', (req, res) => {
   }
 });
 
+// JSONL sync status (admin only in production)
+app.get('/api/admin/jsonl-sync/status', (req, res) => {
+  try {
+    const status = jsonlSyncJob.getSyncStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Manually trigger JSONL sync (admin only in production)
+app.post('/api/admin/jsonl-sync/trigger', async (req, res) => {
+  try {
+    const stats = await jsonlSyncJob.triggerSync();
+    res.json({
+      message: 'Sync completed',
+      stats
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Helper functions for formatting
 function formatUptime(ms) {
   const seconds = Math.floor(ms / 1000);
@@ -339,7 +364,7 @@ io.on('connection', (socket) => {
         return;
       }
 
-      // Spawn Claude CLI directly for streaming
+      // Spawn Claude CLI directly for streaming (like claude-code-webui does)
       const { spawn } = await import('child_process');
       const { randomUUID } = await import('crypto');
       const sessionId = randomUUID();
@@ -376,15 +401,11 @@ io.on('connection', (socket) => {
           try {
             const event = JSON.parse(line);
 
-            // Emit raw event to client for debugging
-            // console.log('Claude event:', event.type);
-
             switch (event.type) {
               case 'system':
                 if (event.model) {
                   model = event.model;
                 }
-                // Send system init event
                 socket.emit('claude-stream-event', {
                   type: 'system',
                   data: event
@@ -399,11 +420,9 @@ io.on('connection', (socket) => {
                 if (event.message) {
                   model = event.message.model || model;
 
-                  // Extract content array
                   if (event.message.content && Array.isArray(event.message.content)) {
                     for (const content of event.message.content) {
                       if (content.type === 'text' && content.text) {
-                        // Stream text content
                         assistantMessage += content.text;
                         socket.emit('claude-stream-event', {
                           type: 'text',
@@ -414,7 +433,6 @@ io.on('connection', (socket) => {
                           data: { text: content.text }
                         });
                       } else if (content.type === 'tool_use') {
-                        // Store tool use event for database persistence
                         const toolEvent = {
                           id: content.id,
                           name: content.name,
@@ -422,7 +440,6 @@ io.on('connection', (socket) => {
                         };
                         toolUseEvents.push(toolEvent);
 
-                        // Stream tool use event
                         socket.emit('claude-stream-event', {
                           type: 'tool_use',
                           data: toolEvent
@@ -435,7 +452,6 @@ io.on('connection', (socket) => {
                     }
                   }
 
-                  // Extract token usage
                   if (event.message.usage && event.message.usage.output_tokens) {
                     tokensUsed = event.message.usage.output_tokens;
                   }
@@ -443,7 +459,6 @@ io.on('connection', (socket) => {
                 break;
 
               case 'result':
-                // Extract final token usage
                 if (event.usage && event.usage.output_tokens) {
                   tokensUsed = event.usage.output_tokens;
                 }
@@ -453,7 +468,7 @@ io.on('connection', (socket) => {
                 break;
             }
           } catch (error) {
-            // Non-JSON line, likely verbose debug output - ignore
+            // Non-JSON line, ignore
           }
         }
       });
@@ -465,11 +480,9 @@ io.on('connection', (socket) => {
 
       // Handle process completion
       claudeProcess.on('close', async (code) => {
-        // Clean up process from tracking
         activeProcesses.delete(socket.id);
 
-        if (code === 0 || code === null || code === 143) { // null means killed by signal, 143 = SIGTERM (stopped by user)
-          // Save assistant message to database with tool use events in meta (only if not killed)
+        if (code === 0 || code === null || code === 143) {
           if (code === 0 && assistantMessage) {
             try {
               const meta = toolUseEvents.length > 0 ? { toolUseEvents } : null;
@@ -487,7 +500,6 @@ io.on('connection', (socket) => {
             }
           }
 
-          // Send completion event
           socket.emit('claude-complete', {
             tokensUsed,
             model,
@@ -499,7 +511,6 @@ io.on('connection', (socket) => {
             exitCode: code
           });
 
-          // Update session stats
           if (session) {
             session.messageCount++;
             session.tokensUsed += tokensUsed || 0;
@@ -565,6 +576,10 @@ async function initialize() {
     console.log('🧹 Cleaning up stopped containers...');
     await dockerService.cleanupStoppedContainers();
 
+    // Start JSONL sync job (Phase 2 - Hybrid Persistence)
+    console.log('🔄 Starting JSONL sync job...');
+    jsonlSyncJob.startSyncJob();
+
     console.log('✅ Initialization complete!');
   } catch (error) {
     console.error('❌ Initialization failed:', error);
@@ -621,6 +636,9 @@ async function start() {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
+
+  // Stop JSONL sync job
+  jsonlSyncJob.stopSyncJob();
 
   httpServer.close(() => {
     console.log('HTTP server closed');

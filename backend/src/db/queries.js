@@ -254,6 +254,35 @@ export async function updateProjectLastAccessed(projectId) {
   );
 }
 
+/**
+ * Update project fields (generic update)
+ * @param {string} projectId - Project UUID
+ * @param {Object} updates - Fields to update (e.g., { claude_session_id: 'session-123', name: 'New Name' })
+ * @returns {Promise<Object>} Updated project
+ */
+export async function updateProject(projectId, updates) {
+  if (!updates || Object.keys(updates).length === 0) {
+    throw new Error('No updates provided');
+  }
+
+  // Build dynamic SET clause
+  const fields = Object.keys(updates)
+    .map((key, i) => `${key} = $${i + 2}`)
+    .join(', ');
+
+  const queryText = `
+    UPDATE projects
+    SET ${fields}, updated_at = NOW()
+    WHERE id = $1
+    RETURNING *
+  `;
+
+  const values = [projectId, ...Object.values(updates)];
+  const result = await query(queryText, values);
+
+  return result.rows[0] || null;
+}
+
 // ============================================================================
 // BUILD QUERIES
 // ============================================================================
@@ -639,6 +668,7 @@ export default {
   getProjectById,
   getProjectBySessionId,
   getUserProjects,
+  updateProject,
   updateProjectMemory,
   updateProjectLastAccessed,
 
