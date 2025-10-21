@@ -31,6 +31,7 @@ import memoryRouter from './src/routes/memory.js';
 import buildsRouter from './src/routes/builds.js';
 import previewsRouter from './src/routes/previews.js';
 import chatRouter from './src/routes/chat.js';
+import devServersRouter from './src/routes/devServers.js';
 
 // Initialize Express app
 const app = express();
@@ -156,6 +157,7 @@ app.use('/api/projects', memoryRouter);
 app.use('/api/builds', buildsRouter);
 app.use('/api/previews', previewsRouter);
 app.use('/api/chat', chatRouter);
+app.use('/api/devservers', devServersRouter);
 
 // Quota summary endpoint
 app.get('/api/quotas/summary', enforceQuotas, getQuotaSummary);

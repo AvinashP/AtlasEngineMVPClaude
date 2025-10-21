@@ -212,6 +212,44 @@ export const quotaApi = {
 };
 
 // ============================================================================
+// DEV SERVER API
+// ============================================================================
+
+export interface DevServer {
+  running: boolean;
+  port?: number;
+  url?: string;
+  status?: string;
+  projectType?: string;
+  startedAt?: string;
+  uptime?: number;
+}
+
+export const devServerApi = {
+  start: async (projectId: string) => {
+    const response = await api.post<{ success: boolean; devServer: DevServer }>(`/devservers/${projectId}/start`);
+    return response.data;
+  },
+
+  stop: async (projectId: string) => {
+    const response = await api.delete<{ success: boolean; message: string }>(`/devservers/${projectId}`);
+    return response.data;
+  },
+
+  getStatus: async (projectId: string) => {
+    const response = await api.get<{ success: boolean; devServer: DevServer }>(`/devservers/${projectId}/status`);
+    return response.data;
+  },
+
+  getLogs: async (projectId: string, limit?: number) => {
+    const response = await api.get<{ success: boolean; logs: any[] }>(`/devservers/${projectId}/logs`, {
+      params: { limit },
+    });
+    return response.data;
+  },
+};
+
+// ============================================================================
 // HEALTH API
 // ============================================================================
 

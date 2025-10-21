@@ -5,7 +5,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { projectApi, previewApi, buildApi } from '@/services/api';
+import { projectApi, previewApi, buildApi, devServerApi, type DevServer } from '@/services/api';
 import type { Preview, Build } from '@/types';
 
 interface PreviewPanelProps {
@@ -19,11 +19,14 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   const [loading, setLoading] = useState(false);
   const [buildLogs, setBuildLogs] = useState<string>('');
   const [showLogs, setShowLogs] = useState(false);
+  const [devServer, setDevServer] = useState<DevServer | null>(null);
+  const [isStartingDevServer, setIsStartingDevServer] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     loadPreview();
     loadBuilds();
+    checkAndStartDevServer();
   }, [projectId]);
 
   // Reload iframe when files change
@@ -57,6 +60,50 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       setBuilds(response.builds);
     } catch (error) {
       console.error('Failed to load builds:', error);
+    }
+  };
+
+  const checkAndStartDevServer = async () => {
+    try {
+      // Check if dev server is already running
+      const statusResponse = await devServerApi.getStatus(projectId);
+
+      if (statusResponse.devServer.running) {
+        console.log('Dev server already running:', statusResponse.devServer);
+        setDevServer(statusResponse.devServer);
+      } else {
+        // Try to start dev server automatically
+        console.log('Attempting to start dev server...');
+        setIsStartingDevServer(true);
+        try {
+          const startResponse = await devServerApi.start(projectId);
+          console.log('Dev server started:', startResponse.devServer);
+          setDevServer(startResponse.devServer);
+          toast.success(`Dev server started on port ${startResponse.devServer.port}`);
+        } catch (error: any) {
+          // If dev server fails to start, it's likely not a Vite/React project
+          // This is fine, we'll fall back to static preview
+          console.log('Dev server not available (likely static HTML project):', error.message);
+        } finally {
+          setIsStartingDevServer(false);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check dev server status:', error);
+      setIsStartingDevServer(false);
+    }
+  };
+
+  const handleStopDevServer = async () => {
+    if (!devServer) return;
+
+    try {
+      await devServerApi.stop(projectId);
+      setDevServer(null);
+      toast.success('Dev server stopped');
+    } catch (error: any) {
+      console.error('Failed to stop dev server:', error);
+      toast.error(`Failed to stop dev server: ${error.message}`);
     }
   };
 
@@ -227,15 +274,34 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       )}
 
       {/* Preview iframe */}
-      <div className="flex-1 bg-white">
-        {preview && preview.status === 'healthy' ? (
+      <div className="flex-1 bg-white relative">
+        {isStartingDevServer && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90 z-10">
+            <div className="text-center">
+              <div className="text-white mb-2">Starting development server...</div>
+              <div className="text-sm text-gray-400">Installing dependencies and starting Vite...</div>
+            </div>
+          </div>
+        )}
+
+        {devServer && devServer.running ? (
+          // Dev server preview (Vite/Next.js/CRA)
+          <iframe
+            ref={iframeRef}
+            key={`dev-server-${refreshKey}`}
+            src={devServer.url}
+            className="w-full h-full border-0"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            title="Dev Server Preview"
+          />
+        ) : preview && preview.status === 'healthy' ? (
           // Docker-based preview (from build/deploy)
           <iframe
             ref={iframeRef}
             src={preview.url}
             className="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            title="App Preview"
+            title="Docker Preview"
           />
         ) : (
           // Static file preview (direct from project directory)
