@@ -17,7 +17,7 @@ class DevServerService {
   /**
    * Detect project type by reading package.json
    */
-  async detectProjectType(projectPath) {
+  async detectProjectType(projectPath, port) {
     try {
       const packageJsonPath = path.join(projectPath, 'package.json');
       const content = await fs.readFile(packageJsonPath, 'utf-8');
@@ -28,15 +28,15 @@ class DevServerService {
       const scripts = packageJson.scripts || {};
 
       if (deps.vite || scripts.dev?.includes('vite')) {
-        return { type: 'vite', command: 'npm', args: ['run', 'dev'] };
+        return { type: 'vite', command: 'npm', args: ['run', 'dev', '--', '--port', port.toString(), '--host'] };
       }
 
       if (deps.next || scripts.dev?.includes('next')) {
-        return { type: 'next', command: 'npm', args: ['run', 'dev'] };
+        return { type: 'next', command: 'npm', args: ['run', 'dev', '--', '--port', port.toString()] };
       }
 
       if (deps['react-scripts']) {
-        return { type: 'cra', command: 'npm', args: ['start'] };
+        return { type: 'cra', command: 'npm', args: ['start'], env: { PORT: port.toString() } };
       }
 
       return null; // Not a recognized dev server project
@@ -115,9 +115,14 @@ class DevServerService {
         }
       }
 
-      // Detect project type
-      const projectType = await this.detectProjectType(projectPath);
+      // Allocate port first (needed for some frameworks like Vite)
+      const port = await portRegistry.allocatePort(projectId, userId);
+      console.log(`📡 Allocated port ${port} for dev server`);
+
+      // Detect project type with port
+      const projectType = await this.detectProjectType(projectPath, port);
       if (!projectType) {
+        await portRegistry.releasePort(port);
         throw new Error('Not a recognized dev server project (no Vite, Next.js, or CRA detected)');
       }
 
@@ -130,20 +135,13 @@ class DevServerService {
         await this.installDependencies(projectId, projectPath);
       }
 
-      // Allocate port
-      const port = await portRegistry.allocatePort(projectId, userId);
-      console.log(`📡 Allocated port ${port} for dev server`);
-
       // Set environment variables for the dev server
       const env = {
         ...process.env,
-        PORT: port.toString(),
-        // Vite specific
-        VITE_PORT: port.toString(),
-        // Next.js specific
-        NEXT_PUBLIC_PORT: port.toString(),
         // Disable browser auto-open
         BROWSER: 'none',
+        // Merge any framework-specific env vars (e.g., CRA uses PORT)
+        ...(projectType.env || {}),
       };
 
       // Start dev server process
