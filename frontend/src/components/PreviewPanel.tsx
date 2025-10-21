@@ -221,6 +221,7 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       {/* Preview iframe */}
       <div className="flex-1 bg-white">
         {preview && preview.status === 'healthy' ? (
+          // Docker-based preview (from build/deploy)
           <iframe
             ref={iframeRef}
             src={preview.url}
@@ -229,21 +230,15 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
             title="App Preview"
           />
         ) : (
-          <div className="flex items-center justify-center h-full bg-gray-900">
-            <div className="text-center text-gray-500">
-              {preview ? (
-                <>
-                  <div className="mb-2">Preview {preview.status}...</div>
-                  <div className="text-xs">Waiting for health check to pass</div>
-                </>
-              ) : (
-                <>
-                  <div className="mb-2">No active preview</div>
-                  <div className="text-xs">Build and deploy to see your app</div>
-                </>
-              )}
-            </div>
-          </div>
+          // Static file preview (direct from project directory)
+          <iframe
+            ref={iframeRef}
+            key={`static-preview-${refreshKey}`}
+            src={`http://localhost:3000/preview/${projectId}/`}
+            className="w-full h-full border-0"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            title="Static Preview"
+          />
         )}
       </div>
     </div>

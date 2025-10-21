@@ -226,6 +226,31 @@ function formatRelativeTime(timestamp) {
   return `${seconds}s ago`;
 }
 
+// Static file server for project previews
+app.use('/preview/:projectId', async (req, res, next) => {
+  try {
+    const { projectId } = req.params;
+    const { getProjectById } = await import('./src/db/queries.js');
+    const project = await getProjectById(projectId);
+
+    if (!project) {
+      return res.status(404).send('Project not found');
+    }
+
+    // Serve static files from project directory
+    const express = await import('express');
+    const staticMiddleware = express.default.static(project.path, {
+      index: ['index.html', 'index.htm'],
+      extensions: ['html', 'htm'],
+    });
+
+    staticMiddleware(req, res, next);
+  } catch (error) {
+    console.error('Static file server error:', error);
+    res.status(500).send('Error serving preview');
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({

@@ -146,7 +146,8 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
 
     // Handle streaming events from Claude CLI
     socket.on('claude-stream-event', (data: { type: string; data: any }) => {
-      setIsTyping(false);
+      // Keep typing indicator visible while processing
+      // Don't set isTyping to false here - let it stay until completion
 
       if (data.type === 'text') {
         // Stream text content - append to current streaming message
@@ -219,6 +220,8 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
     // Keep old ai-response handler for backward compatibility
     socket.on('ai-response', (data: { message: string }) => {
       setIsTyping(false);
+      setIsProcessing(false);
+      setCurrentActivity('');
       setMessages((prev) => [
         ...prev,
         {
@@ -233,6 +236,8 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
     // Handle errors
     socket.on('ai-error', (data: { error: string }) => {
       setIsTyping(false);
+      setIsProcessing(false);
+      setCurrentActivity('');
       setMessages((prev) => [
         ...prev,
         {
