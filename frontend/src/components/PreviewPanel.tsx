@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import toast from 'react-hot-toast';
 import { projectApi, previewApi, buildApi } from '@/services/api';
 import type { Preview, Build } from '@/types';
 
@@ -66,9 +67,11 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       const response = await projectApi.build(projectId);
       setBuildLogs(response.logs || 'Build completed successfully');
       await loadBuilds();
+      toast.success('Build completed successfully!');
     } catch (error: any) {
       setBuildLogs(`Build failed: ${error.message}`);
       console.error('Build failed:', error);
+      toast.error(`Build failed: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -76,13 +79,13 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
 
   const handleDeploy = async () => {
     if (builds.length === 0) {
-      alert('No builds available. Please build the project first.');
+      toast.error('No builds available. Please build the project first.');
       return;
     }
 
     const latestBuild = builds.find((b) => b.status === 'success');
     if (!latestBuild) {
-      alert('No successful builds available');
+      toast.error('No successful builds available');
       return;
     }
 
@@ -90,9 +93,10 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
     try {
       const response = await projectApi.deploy(projectId, latestBuild.id);
       setPreview(response.preview);
+      toast.success('Deployment started successfully!');
     } catch (error: any) {
       console.error('Deploy failed:', error);
-      alert(`Deploy failed: ${error.message}`);
+      toast.error(`Deploy failed: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
@@ -105,8 +109,10 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
     try {
       await previewApi.stop(preview.id);
       setPreview(null);
+      toast.success('Preview stopped successfully');
     } catch (error) {
       console.error('Failed to stop preview:', error);
+      toast.error('Failed to stop preview. Please try again.');
     } finally {
       setLoading(false);
     }

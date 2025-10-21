@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import FileTree from './components/FileTree';
 import CodeEditor from './components/CodeEditor';
 import PreviewPanel from './components/PreviewPanel';
@@ -109,6 +110,7 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to load projects:', error);
+      toast.error('Failed to load projects. Please refresh the page.');
     }
   };
 
@@ -129,9 +131,10 @@ function App() {
 
       setProjects([...projects, response.project]);
       setCurrentProject(response.project);
+      toast.success(`Project "${name}" created successfully!`);
     } catch (error) {
       console.error('Failed to create project:', error);
-      alert('Failed to create project');
+      toast.error('Failed to create project. Please try again.');
     } finally {
       setIsCreatingProject(false);
     }
@@ -182,10 +185,10 @@ function App() {
           t.id === tabId ? { ...t, isDirty: false } : t
         )
       );
-      console.log('File saved successfully');
+      toast.success(`${tab.title} saved successfully`);
     } catch (error) {
       console.error('Failed to save file:', error);
-      alert('Failed to save file');
+      toast.error(`Failed to save ${tab.title}. Please try again.`);
     }
   };
 
@@ -225,7 +228,31 @@ function App() {
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
 
   return (
-    <div className="flex h-screen bg-gray-900 text-gray-100">
+    <>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#1f2937',
+            color: '#f3f4f6',
+            border: '1px solid #374151',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#f3f4f6',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#f3f4f6',
+            },
+          },
+        }}
+      />
+      <div className="flex h-screen bg-gray-900 text-gray-100">
       {/* Left Panel - File Explorer */}
       <div
         className="bg-gray-800 border-r border-gray-700 flex flex-col"
@@ -402,6 +429,7 @@ function App() {
         )}
       </div>
     </div>
+    </>
   );
 }
 
