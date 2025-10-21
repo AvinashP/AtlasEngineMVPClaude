@@ -366,8 +366,10 @@ io.on('connection', (socket) => {
 
       // Spawn Claude CLI directly for streaming
       const { spawn } = await import('child_process');
-      const { randomUUID } = await import('crypto');
-      const sessionId = randomUUID();
+
+      // Use projectId as session ID for persistent session across all messages
+      // This enables Claude to maintain context and remember conversation history
+      const sessionId = projectId;
 
       // Prepend system instructions to keep Claude within project directory
       const systemInstruction = `IMPORTANT SYSTEM INSTRUCTION: You are working on a user project located at: ${session.projectPath}
@@ -388,6 +390,7 @@ User's request: ${message}`;
         '--verbose',
         '--dangerously-skip-permissions',
         '--session-id', sessionId,
+        '--project', session.projectPath,  // Explicitly tell Claude this is a project (enables CLAUDE.md auto-loading)
         systemInstruction
       ];
 
