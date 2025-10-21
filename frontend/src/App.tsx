@@ -69,13 +69,19 @@ function App() {
       });
     };
 
-    const handleMouseUp = () => {
+    const stopResizing = () => {
       isResizingLeftRef.current = false;
       isResizingRightRef.current = false;
       setIsResizingLeft(false);
       setIsResizingRight(false);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+
+      // Re-enable pointer events on all iframes
+      const iframes = document.querySelectorAll('iframe');
+      iframes.forEach((iframe) => {
+        (iframe as HTMLElement).style.pointerEvents = '';
+      });
 
       // Cancel any pending animation frame
       if (animationFrameRef.current) {
@@ -84,12 +90,16 @@ function App() {
     };
 
     // Add event listeners once at mount
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    // Use window instead of document to catch events even outside the page
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', stopResizing);
+    // Stop resizing if window loses focus (safety fallback)
+    window.addEventListener('blur', stopResizing);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', stopResizing);
+      window.removeEventListener('blur', stopResizing);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
@@ -328,6 +338,11 @@ function App() {
           setIsResizingLeft(true);
           document.body.style.cursor = 'col-resize';
           document.body.style.userSelect = 'none';
+          // Prevent iframes from capturing mouse events during resize
+          const iframes = document.querySelectorAll('iframe');
+          iframes.forEach((iframe) => {
+            (iframe as HTMLElement).style.pointerEvents = 'none';
+          });
         }}
       />
 
@@ -436,6 +451,11 @@ function App() {
           setIsResizingRight(true);
           document.body.style.cursor = 'col-resize';
           document.body.style.userSelect = 'none';
+          // Prevent iframes from capturing mouse events during resize
+          const iframes = document.querySelectorAll('iframe');
+          iframes.forEach((iframe) => {
+            (iframe as HTMLElement).style.pointerEvents = 'none';
+          });
         }}
       />
 
