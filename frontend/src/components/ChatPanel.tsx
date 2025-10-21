@@ -6,6 +6,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatPanelProps {
   projectId: string;
@@ -425,10 +427,77 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
                 </div>
               </div>
             ) : (
-              // Normal text message display
+              // Normal text message display with markdown support
               <div className={`max-w-[80%] rounded-lg p-3 ${getMessageStyle(message.role)}`}>
-                <div className="text-sm whitespace-pre-wrap break-words">
-                  {message.content}
+                <div className="text-sm prose prose-invert prose-sm max-w-none">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      // Paragraph
+                      p: ({children, node}) => {
+                        // Check if paragraph is inside a list item
+                        const isInListItem = node?.position?.start?.column > 1;
+                        return isInListItem ?
+                          <>{children}</> :
+                          <p className="mb-2 last:mb-0">{children}</p>;
+                      },
+                      // Headings
+                      h1: ({children}) => <h1 className="text-xl font-bold mb-2 mt-3 first:mt-0">{children}</h1>,
+                      h2: ({children}) => <h2 className="text-lg font-bold mb-2 mt-3 first:mt-0">{children}</h2>,
+                      h3: ({children}) => <h3 className="text-base font-bold mb-2 mt-2 first:mt-0">{children}</h3>,
+                      // Lists
+                      ul: ({children}) => <ul className="list-disc list-outside mb-2 ml-4 space-y-0.5">{children}</ul>,
+                      ol: ({children}) => <ol className="list-decimal list-outside mb-2 ml-4 space-y-0.5">{children}</ol>,
+                      li: ({children}) => <li className="leading-relaxed">{children}</li>,
+                      // Code
+                      code: ({inline, children, ...props}: any) =>
+                        inline ? (
+                          <code className="px-1.5 py-0.5 bg-gray-700 rounded text-blue-300 font-mono text-xs" {...props}>
+                            {children}
+                          </code>
+                        ) : (
+                          <code className="font-mono text-xs" {...props}>
+                            {children}
+                          </code>
+                        ),
+                      pre: ({children}) => <pre className="bg-gray-900 rounded p-3 overflow-x-auto my-2 text-sm">{children}</pre>,
+                      // Blockquote
+                      blockquote: ({children}) => (
+                        <blockquote className="border-l-4 border-blue-500 pl-3 italic text-gray-300 my-2">
+                          {children}
+                        </blockquote>
+                      ),
+                      // Links
+                      a: ({children, href}) => (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 underline"
+                        >
+                          {children}
+                        </a>
+                      ),
+                      // Tables
+                      table: ({children}) => (
+                        <div className="overflow-x-auto my-2">
+                          <table className="min-w-full border-collapse border border-gray-600">
+                            {children}
+                          </table>
+                        </div>
+                      ),
+                      thead: ({children}) => <thead className="bg-gray-700">{children}</thead>,
+                      th: ({children}) => <th className="border border-gray-600 px-3 py-2 text-left">{children}</th>,
+                      td: ({children}) => <td className="border border-gray-600 px-3 py-2">{children}</td>,
+                      // Strong and emphasis
+                      strong: ({children}) => <strong className="font-bold text-gray-100">{children}</strong>,
+                      em: ({children}) => <em className="italic text-gray-200">{children}</em>,
+                      // Horizontal rule
+                      hr: () => <hr className="border-gray-600 my-3" />,
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
                   {message.isStreaming && (
                     <span className="inline-block w-2 h-4 bg-current ml-1 animate-pulse"></span>
                   )}
