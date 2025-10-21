@@ -20,6 +20,7 @@ import db from './src/db/connection.js';
 import dockerService from './src/services/dockerService.js';
 import portRegistry from './src/services/portRegistry.js';
 import claudeService from './src/services/claudeService.js';
+import memoryService from './src/services/memoryService.js';
 
 // Import middleware
 import { enforceQuotas, getQuotaSummary } from './src/middleware/quotas.js';
@@ -525,6 +526,31 @@ User's request: ${message}`;
               });
             } catch (error) {
               console.error('Failed to save assistant message:', error.message);
+            }
+
+            // Analyze tool use and intelligently update CLAUDE.md memory
+            if (toolUseEvents.length > 0) {
+              try {
+                const memoryUpdate = await memoryService.analyzeAndUpdateFromToolUse(
+                  projectId,
+                  session.projectPath,
+                  project.user_id,
+                  toolUseEvents,
+                  message,
+                  assistantMessage
+                );
+
+                if (memoryUpdate.updated) {
+                  console.log(`✅ Memory updated for project ${projectId}:`, memoryUpdate.insights);
+
+                  if (memoryUpdate.checkpointCreated) {
+                    console.log(`📸 Auto-checkpoint created for milestone`);
+                  }
+                }
+              } catch (error) {
+                console.error('Failed to update memory from tool use:', error.message);
+                // Don't fail the request if memory update fails
+              }
             }
           }
 

@@ -508,6 +508,134 @@ Last updated: ${timestamp}
       throw error;
     }
   }
+
+  /**
+   * Analyze tool use events and generate intelligent memory updates
+   * @param {string} projectId - Project UUID
+   * @param {string} projectPath - Filesystem path to project
+   * @param {string} userId - User UUID
+   * @param {Array} toolUseEvents - Array of tool use events from Claude
+   * @param {string} userMessage - Original user message
+   * @param {string} assistantMessage - Claude's response
+   * @returns {Promise<Object>} Analysis results with suggested updates
+   */
+  async analyzeAndUpdateFromToolUse(projectId, projectPath, userId, toolUseEvents, userMessage, assistantMessage) {
+    try {
+      if (!toolUseEvents || toolUseEvents.length === 0) {
+        return { updated: false, reason: 'No tool use events to analyze' };
+      }
+
+      const updates = {};
+      const insights = [];
+
+      // Analyze each tool use event
+      for (const toolEvent of toolUseEvents) {
+        const { name, input } = toolEvent;
+
+        switch (name) {
+          case 'Write':
+            // New file created
+            if (input && input.file_path) {
+              const fileName = input.file_path.split('/').pop();
+              const fileExt = fileName.split('.').pop();
+
+              insights.push(`Created new file: ${fileName}`);
+
+              // Detect file type and update appropriate sections
+              if (fileExt === 'json' && fileName.includes('package')) {
+                insights.push(`Added dependencies via ${fileName}`);
+              } else if (fileExt === 'tsx' || fileExt === 'jsx') {
+                insights.push(`Created React component: ${fileName}`);
+              } else if (fileExt === 'ts' || fileExt === 'js') {
+                insights.push(`Created module: ${fileName}`);
+              } else if (fileExt === 'md') {
+                insights.push(`Created documentation: ${fileName}`);
+              }
+            }
+            break;
+
+          case 'Edit':
+            // File modified
+            if (input && input.file_path) {
+              const fileName = input.file_path.split('/').pop();
+              insights.push(`Modified file: ${fileName}`);
+            }
+            break;
+
+          case 'Bash':
+            // Command executed
+            if (input && input.command) {
+              const cmd = input.command;
+
+              if (cmd.includes('npm install') || cmd.includes('yarn add')) {
+                const match = cmd.match(/(npm install|yarn add)\s+(.+)/);
+                if (match) {
+                  insights.push(`Installed dependencies: ${match[2]}`);
+                }
+              } else if (cmd.includes('git')) {
+                insights.push(`Executed git command: ${cmd.substring(0, 50)}...`);
+              } else if (cmd.includes('npm run') || cmd.includes('yarn')) {
+                insights.push(`Executed build/test command`);
+              }
+            }
+            break;
+
+          case 'Read':
+            // File read - generally doesn't need memory update
+            break;
+
+          case 'Glob':
+          case 'Grep':
+            // Search operations - doesn't need memory update
+            break;
+
+          default:
+            // Other tools
+            insights.push(`Used tool: ${name}`);
+        }
+      }
+
+      // Generate status update from insights and conversation
+      if (insights.length > 0) {
+        const timestamp = new Date().toISOString();
+        const statusUpdate = `Last updated: ${timestamp}\n- ${insights.join('\n- ')}\n- Activity: ${userMessage.substring(0, 100)}${userMessage.length > 100 ? '...' : ''}`;
+        updates.status = statusUpdate;
+      }
+
+      // Count files created
+      const filesCreated = toolUseEvents.filter(e => e.name === 'Write').length;
+
+      // Auto-checkpoint on significant milestones
+      let checkpointCreated = false;
+      if (filesCreated >= 3) {
+        // Multiple files created - significant work
+        await this.createCheckpoint(
+          projectId,
+          projectPath,
+          userId,
+          `Milestone: Created ${filesCreated} files`,
+          { toolUseEvents, insights }
+        );
+        checkpointCreated = true;
+      }
+
+      // Apply updates if any
+      if (Object.keys(updates).length > 0) {
+        await this.updateMemory(projectId, projectPath, userId, updates);
+      }
+
+      return {
+        updated: Object.keys(updates).length > 0,
+        insights,
+        checkpointCreated,
+        updates
+      };
+
+    } catch (error) {
+      console.error('Error analyzing tool use for memory update:', error);
+      return { updated: false, error: error.message };
+    }
+  }
 }
 
 // Export singleton instance
