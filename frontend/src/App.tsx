@@ -3,7 +3,7 @@
  * Modern tabbed layout: File Explorer | Tabbed Editor/Preview/Memory | Chat
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import FileTree from './components/FileTree';
 import CodeEditor from './components/CodeEditor';
@@ -36,6 +36,11 @@ function App() {
   const [isResizingLeft, setIsResizingLeft] = useState(false);
   const [isResizingRight, setIsResizingRight] = useState(false);
 
+  // Use refs for smooth resizing
+  const isResizingLeftRef = useRef(false);
+  const isResizingRightRef = useRef(false);
+  const animationFrameRef = useRef<number>();
+
   // File change tracking - increment this to trigger refreshes
   const [fileChangeCounter, setFileChangeCounter] = useState(0);
 
@@ -44,37 +49,52 @@ function App() {
     loadProjects();
   }, []);
 
-  // Handle mouse move for resizing
+  // Handle mouse move for resizing with smooth performance
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isResizingLeft) {
-        const newWidth = Math.max(200, Math.min(600, e.clientX));
-        setLeftPanelWidth(newWidth);
-      } else if (isResizingRight) {
-        const newWidth = Math.max(300, Math.min(800, window.innerWidth - e.clientX));
-        setRightPanelWidth(newWidth);
+      // Cancel any pending animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
+
+      // Use requestAnimationFrame for smooth 60fps updates
+      animationFrameRef.current = requestAnimationFrame(() => {
+        if (isResizingLeftRef.current) {
+          const newWidth = Math.max(200, Math.min(600, e.clientX));
+          setLeftPanelWidth(newWidth);
+        } else if (isResizingRightRef.current) {
+          const newWidth = Math.max(300, Math.min(800, window.innerWidth - e.clientX));
+          setRightPanelWidth(newWidth);
+        }
+      });
     };
 
     const handleMouseUp = () => {
+      isResizingLeftRef.current = false;
+      isResizingRightRef.current = false;
       setIsResizingLeft(false);
       setIsResizingRight(false);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+
+      // Cancel any pending animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
 
-    if (isResizingLeft || isResizingRight) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    }
+    // Add event listeners once at mount
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
     };
-  }, [isResizingLeft, isResizingRight]);
+  }, []); // Empty dependency array - listeners added once
 
   // Auto-open Preview, Memory, and Admin tabs when project loads
   useEffect(() => {
@@ -303,7 +323,12 @@ function App() {
       {/* Left Resize Handle */}
       <div
         className="w-1 bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors"
-        onMouseDown={() => setIsResizingLeft(true)}
+        onMouseDown={() => {
+          isResizingLeftRef.current = true;
+          setIsResizingLeft(true);
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
+        }}
       />
 
       {/* Center Panel - Tabs */}
@@ -406,7 +431,12 @@ function App() {
       {/* Right Resize Handle */}
       <div
         className="w-1 bg-gray-700 hover:bg-blue-500 cursor-col-resize transition-colors"
-        onMouseDown={() => setIsResizingRight(true)}
+        onMouseDown={() => {
+          isResizingRightRef.current = true;
+          setIsResizingRight(true);
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
+        }}
       />
 
       {/* Right Panel - Chat Only */}
