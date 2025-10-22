@@ -174,12 +174,11 @@ class DevServerService {
         const vitePortMatch = log.match(/Local:\s+http:\/\/localhost:(\d+)/);
         if (vitePortMatch) {
           const actualPort = parseInt(vitePortMatch[1], 10);
-          if (actualPort !== port) {
-            console.log(`⚠️  Vite auto-incremented port: ${port} → ${actualPort}`);
+          if (actualPort !== serverInfo.port) {
+            console.log(`⚠️  Vite auto-incremented port: ${serverInfo.port} → ${actualPort}`);
             // Release old port and update to actual port
-            portRegistry.releasePort(port);
+            portRegistry.releasePort(serverInfo.port);
             serverInfo.port = actualPort;
-            port = actualPort; // Update local variable for logging
           }
         }
 
