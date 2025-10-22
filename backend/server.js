@@ -278,6 +278,8 @@ app.use((err, req, res, next) => {
 
 // Track active Claude processes per socket
 const activeProcesses = new Map(); // socketId -> { process, projectId }
+// Track active Claude processes per project to prevent concurrent access
+const activeProjectProcesses = new Map(); // projectId -> { process, socketId, startedAt }
 
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
@@ -301,9 +303,10 @@ io.on('connection', (socket) => {
 
     const processInfo = activeProcesses.get(socket.id);
     if (processInfo && processInfo.process) {
-      console.log(`Killing Claude process for socket ${socket.id}`);
+      console.log(`Killing Claude process for socket ${socket.id}, project ${projectId}`);
       processInfo.process.kill('SIGTERM');
       activeProcesses.delete(socket.id);
+      activeProjectProcesses.delete(projectId);
 
       socket.emit('ai-stopped', { projectId });
       socket.to(`project-${projectId}`).emit('ai-stopped', { projectId });
@@ -367,6 +370,16 @@ io.on('connection', (socket) => {
         return;
       }
 
+      // Check if another Claude process is already running for this project
+      if (activeProjectProcesses.has(projectId)) {
+        const existingProcess = activeProjectProcesses.get(projectId);
+        console.log(`Claude process already running for project ${projectId} (started ${Date.now() - existingProcess.startedAt}ms ago)`);
+        socket.emit('ai-error', {
+          error: 'Another request is already being processed for this project. Please wait for it to complete.'
+        });
+        return;
+      }
+
       // Spawn Claude CLI directly for streaming
       const { spawn } = await import('child_process');
 
@@ -402,8 +415,10 @@ User's request: ${message}`;
         stdio: ['pipe', 'pipe', 'pipe']
       });
 
-      // Register process for stopping
-      activeProcesses.set(socket.id, { process: claudeProcess, projectId });
+      // Register process for stopping (both by socket and project)
+      const processInfo = { process: claudeProcess, projectId, socketId: socket.id, startedAt: Date.now() };
+      activeProcesses.set(socket.id, processInfo);
+      activeProjectProcesses.set(projectId, processInfo);
 
       let assistantMessage = '';
       let tokensUsed = 0;
@@ -508,8 +523,10 @@ User's request: ${message}`;
 
       // Handle process completion
       claudeProcess.on('close', async (code) => {
-        // Clean up process from tracking
+        // Clean up process from tracking (both maps)
         activeProcesses.delete(socket.id);
+        activeProjectProcesses.delete(projectId);
+        console.log(`Claude process completed for project ${projectId} with code ${code}`);
 
         if (code === 0 || code === null || code === 143) { // null means killed by signal, 143 = SIGTERM (stopped by user)
           // Save assistant message to database with tool use events in meta (only if not killed)
@@ -580,6 +597,9 @@ User's request: ${message}`;
       // Handle process errors
       claudeProcess.on('error', (error) => {
         console.error('Claude CLI process error:', error);
+        // Clean up process from tracking (both maps)
+        activeProcesses.delete(socket.id);
+        activeProjectProcesses.delete(projectId);
         socket.emit('ai-error', { error: error.message });
       });
 
@@ -595,6 +615,19 @@ User's request: ${message}`;
   // Handle disconnection
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
+
+    // Clean up any running Claude process for this socket
+    const processInfo = activeProcesses.get(socket.id);
+    if (processInfo) {
+      console.log(`Cleaning up Claude process for disconnected socket ${socket.id}, project ${processInfo.projectId}`);
+      try {
+        processInfo.process.kill('SIGTERM');
+      } catch (error) {
+        console.error(`Failed to kill process: ${error.message}`);
+      }
+      activeProcesses.delete(socket.id);
+      activeProjectProcesses.delete(processInfo.projectId);
+    }
   });
 });
 
