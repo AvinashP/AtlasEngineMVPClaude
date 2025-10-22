@@ -24,6 +24,7 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   const [hasDevServerProject, setHasDevServerProject] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [currentUrl, setCurrentUrl] = useState('');
+  const [iframeReloadKey, setIframeReloadKey] = useState(0);
 
   useEffect(() => {
     loadPreview();
@@ -132,6 +133,7 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       console.log('Dev server started:', startResponse.devServer);
       setDevServer(startResponse.devServer);
       setHasDevServerProject(true); // Mark this as a dev server project
+      setIframeReloadKey(prev => prev + 1); // Force iframe reload
       toast.success(`Dev server started on port ${startResponse.devServer.port}`);
     } catch (error: any) {
       console.error('Failed to start dev server:', error);
@@ -151,6 +153,7 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
     try {
       await devServerApi.stop(projectId);
       setDevServer(null);
+      setIframeReloadKey(prev => prev + 1); // Force iframe reload
       toast.success('Dev server stopped');
     } catch (error: any) {
       console.error('Failed to stop dev server:', error);
@@ -219,12 +222,9 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   };
 
   const handleRefresh = () => {
-    if (iframeRef.current) {
-      console.log('🔄 Manually refreshing preview');
-      const iframe = iframeRef.current;
-      iframe.src = iframe.src; // Force reload
-      toast.success('Preview refreshed');
-    }
+    console.log('🔄 Manually refreshing preview');
+    setIframeReloadKey(prev => prev + 1); // Force iframe remount
+    toast.success('Preview refreshed');
   };
 
   const getStatusColor = (status: string) => {
@@ -443,7 +443,7 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
         {/* Single iframe that updates src based on preview type */}
         <iframe
           ref={iframeRef}
-          key={`preview-${refreshKey}`}
+          key={`preview-${refreshKey}-${iframeReloadKey}`}
           src={currentUrl || 'about:blank'}
           className={`w-full h-full border-0 ${!currentUrl ? 'hidden' : ''}`}
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
