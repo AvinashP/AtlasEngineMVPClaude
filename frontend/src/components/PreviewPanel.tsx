@@ -84,24 +84,28 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
         console.log('Dev server already running:', statusResponse.devServer);
         setDevServer(statusResponse.devServer);
       } else {
-        // Try to start dev server automatically
-        console.log('Attempting to start dev server...');
-        setIsStartingDevServer(true);
-        try {
-          const startResponse = await devServerApi.start(projectId);
-          console.log('Dev server started:', startResponse.devServer);
-          setDevServer(startResponse.devServer);
-          toast.success(`Dev server started on port ${startResponse.devServer.port}`);
-        } catch (error: any) {
-          // If dev server fails to start, it's likely not a Vite/React project
-          // This is fine, we'll fall back to static preview
-          console.log('Dev server not available (likely static HTML project):', error.message);
-        } finally {
-          setIsStartingDevServer(false);
-        }
+        // Don't auto-start dev server on page load
+        // User can manually start it with the "Start Dev Server" button
+        console.log('Dev server not running. Use Start Dev Server button to start.');
+        setDevServer(null);
       }
     } catch (error) {
       console.error('Failed to check dev server status:', error);
+      setDevServer(null);
+    }
+  };
+
+  const handleStartDevServer = async () => {
+    setIsStartingDevServer(true);
+    try {
+      const startResponse = await devServerApi.start(projectId);
+      console.log('Dev server started:', startResponse.devServer);
+      setDevServer(startResponse.devServer);
+      toast.success(`Dev server started on port ${startResponse.devServer.port}`);
+    } catch (error: any) {
+      console.error('Failed to start dev server:', error);
+      toast.error(`Failed to start dev server: ${error.message}`);
+    } finally {
       setIsStartingDevServer(false);
     }
   };
@@ -312,13 +316,26 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
           </svg>
           <span className="text-gray-300 truncate">{currentUrl || 'No preview available'}</span>
         </div>
-        {devServer && devServer.running && (
+        {devServer && devServer.running ? (
           <button
             onClick={handleStopDevServer}
             className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm"
             title="Stop dev server"
           >
             Stop Dev Server
+          </button>
+        ) : (
+          <button
+            onClick={handleStartDevServer}
+            disabled={isStartingDevServer}
+            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-sm flex items-center gap-1"
+            title="Start dev server for HMR"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {isStartingDevServer ? 'Starting...' : 'Start Dev Server'}
           </button>
         )}
       </div>
