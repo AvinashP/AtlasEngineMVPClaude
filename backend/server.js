@@ -382,14 +382,14 @@ io.on('connection', (socket) => {
 
       // Spawn Claude CLI directly for streaming
       const { spawn } = await import('child_process');
+      const { randomUUID } = await import('crypto');
 
-      // Use socket ID as session ID to allow multiple concurrent sessions per project
-      // This prevents "Session ID already in use" errors when switching between projects
+      // Generate unique UUID session ID for this request
+      // Each browser tab/connection gets its own Claude session to prevent lock conflicts
       // Conversation history is maintained in database and CLAUDE.md, not in Claude CLI sessions
-      const sessionId = `${projectId}-${socket.id}`;
+      const sessionId = randomUUID();
 
-      // Note: Each browser tab/connection gets its own Claude session
-      // This allows multiple users or tabs to work on the same project simultaneously
+      // Note: Sessions are ephemeral and tied to socket lifecycle
       // Project memory (CLAUDE.md) and database provide conversation continuity
 
       // Prepend system instructions to keep Claude within project directory
