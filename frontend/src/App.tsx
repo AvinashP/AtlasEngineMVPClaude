@@ -123,7 +123,7 @@ function App() {
       const memoryTab: Tab = {
         id: 'memory',
         type: 'memory',
-        title: 'CLAUDE.md',
+        title: 'Memory',
       };
       const adminTab: Tab = {
         id: 'admin',
