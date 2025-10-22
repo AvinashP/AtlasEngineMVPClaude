@@ -21,6 +21,7 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   const [showLogs, setShowLogs] = useState(false);
   const [devServer, setDevServer] = useState<DevServer | null>(null);
   const [isStartingDevServer, setIsStartingDevServer] = useState(false);
+  const [hasDevServerProject, setHasDevServerProject] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [currentUrl, setCurrentUrl] = useState('');
 
@@ -37,13 +38,17 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       newUrl = devServer.url;
     } else if (preview && preview.status === 'healthy') {
       newUrl = preview.url;
-    } else {
+    } else if (!hasDevServerProject) {
+      // Only use static preview if this is NOT a dev server project
       newUrl = `http://localhost:3000/preview/${projectId}/`;
+    } else {
+      // For dev server projects, show blank when server is stopped
+      newUrl = '';
     }
 
     console.log('Preview type changed, new URL:', newUrl);
     setCurrentUrl(newUrl);
-  }, [devServer, preview, projectId]);
+  }, [devServer, preview, projectId, hasDevServerProject]);
 
   // Reload iframe when currentUrl changes
   useEffect(() => {
@@ -95,15 +100,19 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       if (statusResponse.devServer.running) {
         console.log('Dev server already running:', statusResponse.devServer);
         setDevServer(statusResponse.devServer);
+        setHasDevServerProject(true);
       } else {
         // Don't auto-start dev server on page load
         // User can manually start it with the "Start Dev Server" button
         console.log('Dev server not running. Use Start Dev Server button to start.');
         setDevServer(null);
+        // Note: We can't definitively know if this is a dev server project without trying to start it
+        // So we'll leave hasDevServerProject as false until dev server is started
       }
     } catch (error) {
       console.error('Failed to check dev server status:', error);
       setDevServer(null);
+      setHasDevServerProject(false);
     }
   };
 
@@ -113,10 +122,15 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       const startResponse = await devServerApi.start(projectId);
       console.log('Dev server started:', startResponse.devServer);
       setDevServer(startResponse.devServer);
+      setHasDevServerProject(true); // Mark this as a dev server project
       toast.success(`Dev server started on port ${startResponse.devServer.port}`);
     } catch (error: any) {
       console.error('Failed to start dev server:', error);
       toast.error(`Failed to start dev server: ${error.message}`);
+      // If it failed because it's not a dev server project, mark it as such
+      if (error.message?.includes('Not a recognized dev server project')) {
+        setHasDevServerProject(false);
+      }
     } finally {
       setIsStartingDevServer(false);
     }
@@ -326,7 +340,9 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
           <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
           </svg>
-          <span className="text-gray-300 truncate">{currentUrl || 'No preview available'}</span>
+          <span className="text-gray-300 truncate">
+            {currentUrl || (hasDevServerProject ? 'Dev server stopped' : 'No preview available')}
+          </span>
         </div>
         {devServer && devServer.running ? (
           <button
@@ -354,6 +370,34 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
 
       {/* Preview iframe */}
       <div className="flex-1 bg-white relative">
+        {/* Message: Dev server stopped */}
+        {!currentUrl && hasDevServerProject && !isStartingDevServer && !loading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
+            <div className="text-center px-6">
+              <div className="mb-4">
+                <svg className="h-16 w-16 text-gray-500 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div className="text-white text-xl font-semibold mb-3">Dev Server Stopped</div>
+              <div className="text-gray-400 mb-4 max-w-md">
+                This project requires a development server (Vite/Next.js/CRA) to preview.
+                Click the "Start Dev Server" button above to view the preview.
+              </div>
+              <button
+                onClick={handleStartDevServer}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium inline-flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Start Dev Server
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Loading state: Starting dev server */}
         {isStartingDevServer && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
@@ -388,20 +432,22 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
         )}
 
         {/* Single iframe that updates src based on preview type */}
-        <iframe
-          ref={iframeRef}
-          key={`preview-${refreshKey}`}
-          src={currentUrl}
-          className="w-full h-full border-0"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-          title={
-            devServer?.running
-              ? 'Dev Server Preview'
-              : preview?.status === 'healthy'
-              ? 'Docker Preview'
-              : 'Static Preview'
-          }
-        />
+        {currentUrl && (
+          <iframe
+            ref={iframeRef}
+            key={`preview-${refreshKey}`}
+            src={currentUrl}
+            className="w-full h-full border-0"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+            title={
+              devServer?.running
+                ? 'Dev Server Preview'
+                : preview?.status === 'healthy'
+                ? 'Docker Preview'
+                : 'Static Preview'
+            }
+          />
+        )}
       </div>
     </div>
   );
