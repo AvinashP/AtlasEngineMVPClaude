@@ -32,14 +32,26 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
 
   // Update current URL when preview/devServer changes
   useEffect(() => {
+    let newUrl = '';
     if (devServer && devServer.running) {
-      setCurrentUrl(devServer.url);
+      newUrl = devServer.url;
     } else if (preview && preview.status === 'healthy') {
-      setCurrentUrl(preview.url);
+      newUrl = preview.url;
     } else {
-      setCurrentUrl(`http://localhost:3000/preview/${projectId}/`);
+      newUrl = `http://localhost:3000/preview/${projectId}/`;
     }
+
+    console.log('Preview type changed, new URL:', newUrl);
+    setCurrentUrl(newUrl);
   }, [devServer, preview, projectId]);
+
+  // Reload iframe when currentUrl changes
+  useEffect(() => {
+    if (iframeRef.current && currentUrl) {
+      console.log('Updating iframe to:', currentUrl);
+      iframeRef.current.src = currentUrl;
+    }
+  }, [currentUrl]);
 
   // Reload iframe when files change
   useEffect(() => {
@@ -375,36 +387,21 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
           </div>
         )}
 
-        {devServer && devServer.running ? (
-          // Dev server preview (Vite/Next.js/CRA)
-          <iframe
-            ref={iframeRef}
-            key={`dev-server-${refreshKey}`}
-            src={devServer.url}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            title="Dev Server Preview"
-          />
-        ) : preview && preview.status === 'healthy' ? (
-          // Docker-based preview (from build/deploy)
-          <iframe
-            ref={iframeRef}
-            src={preview.url}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            title="Docker Preview"
-          />
-        ) : (
-          // Static file preview (direct from project directory)
-          <iframe
-            ref={iframeRef}
-            key={`static-preview-${refreshKey}`}
-            src={`http://localhost:3000/preview/${projectId}/`}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            title="Static Preview"
-          />
-        )}
+        {/* Single iframe that updates src based on preview type */}
+        <iframe
+          ref={iframeRef}
+          key={`preview-${refreshKey}`}
+          src={currentUrl}
+          className="w-full h-full border-0"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          title={
+            devServer?.running
+              ? 'Dev Server Preview'
+              : preview?.status === 'healthy'
+              ? 'Docker Preview'
+              : 'Static Preview'
+          }
+        />
       </div>
     </div>
   );
