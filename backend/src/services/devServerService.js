@@ -169,6 +169,20 @@ class DevServerService {
         serverInfo.logs.push({ type: 'stdout', message: log, timestamp: new Date() });
         console.log(`[${projectId}:${port}] ${log.trim()}`);
 
+        // Detect actual port from Vite output (in case it auto-incremented)
+        // Vite outputs: "➜  Local:   http://localhost:3005/"
+        const vitePortMatch = log.match(/Local:\s+http:\/\/localhost:(\d+)/);
+        if (vitePortMatch) {
+          const actualPort = parseInt(vitePortMatch[1], 10);
+          if (actualPort !== port) {
+            console.log(`⚠️  Vite auto-incremented port: ${port} → ${actualPort}`);
+            // Release old port and update to actual port
+            portRegistry.releasePort(port);
+            serverInfo.port = actualPort;
+            port = actualPort; // Update local variable for logging
+          }
+        }
+
         // Detect when server is ready
         if (
           log.includes('ready in') || // Vite
@@ -177,7 +191,7 @@ class DevServerService {
           log.includes('started server on')  // Next.js
         ) {
           serverInfo.status = 'running';
-          console.log(`✅ Dev server running for ${projectId} on http://localhost:${port}`);
+          console.log(`✅ Dev server running for ${projectId} on http://localhost:${serverInfo.port}`);
         }
       });
 
@@ -213,8 +227,8 @@ class DevServerService {
 
       return {
         success: true,
-        port,
-        url: `http://localhost:${port}`,
+        port: serverInfo.port, // Use actual port (may have auto-incremented)
+        url: `http://localhost:${serverInfo.port}`,
         status: 'running',
         projectType: projectType.type,
       };
