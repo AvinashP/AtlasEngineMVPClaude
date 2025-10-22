@@ -54,7 +54,16 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   useEffect(() => {
     if (iframeRef.current && currentUrl) {
       console.log('Updating iframe to:', currentUrl);
-      iframeRef.current.src = currentUrl;
+      const iframe = iframeRef.current;
+      // Force a complete reload by setting to blank first
+      iframe.src = 'about:blank';
+      // Then set to the actual URL after a brief delay
+      setTimeout(() => {
+        if (iframe && currentUrl) {
+          iframe.src = currentUrl;
+          console.log('✅ Preview iframe loaded:', currentUrl);
+        }
+      }, 50);
     }
   }, [currentUrl]);
 
@@ -432,22 +441,20 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
         )}
 
         {/* Single iframe that updates src based on preview type */}
-        {currentUrl && (
-          <iframe
-            ref={iframeRef}
-            key={`preview-${refreshKey}`}
-            src={currentUrl}
-            className="w-full h-full border-0"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            title={
-              devServer?.running
-                ? 'Dev Server Preview'
-                : preview?.status === 'healthy'
-                ? 'Docker Preview'
-                : 'Static Preview'
-            }
-          />
-        )}
+        <iframe
+          ref={iframeRef}
+          key={`preview-${refreshKey}`}
+          src={currentUrl || 'about:blank'}
+          className={`w-full h-full border-0 ${!currentUrl ? 'hidden' : ''}`}
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          title={
+            devServer?.running
+              ? 'Dev Server Preview'
+              : preview?.status === 'healthy'
+              ? 'Docker Preview'
+              : 'Static Preview'
+          }
+        />
       </div>
     </div>
   );
