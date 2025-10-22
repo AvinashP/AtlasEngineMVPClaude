@@ -41,7 +41,7 @@ AtlasEngine is an AI-powered full-stack development platform with persistent mem
 - Comments: Inline comments for complex logic, JSDoc for function documentation
 
 ## Current Status
-Last updated: 2025-10-22T07:10:00Z
+Last updated: 2025-10-22T07:30:00Z
 
 **✅ MVP CORE FEATURES: 13/18 COMPLETE (72%)**
 
@@ -71,12 +71,16 @@ Phase 1 MVP progress against Planning/atlas-mvp-plan.md checklist:
 17. Starter templates (Next.js, Vite+React, Express, Flask)
 18. Debug surface (/debug page for ops)
 
-**Recent Enhancements (2025-10-22):**
+**Recent Enhancements (2025-10-22 - Session 6):**
+- ✅ **Tabbed UI Refactor** - Split Preview panel into 4 main tabs (Preview, Build & Deploy, Memory, Admin)
+- ✅ **BuildPanel Component** - Dedicated panel for all build/deploy operations and logs
+- ✅ **Clean Separation** - Preview focused on viewing, Build focused on operations
 - ✅ Dev server preview system refinements (Start/Stop controls, auto-refresh)
 - ✅ Intelligent preview type detection (dev server vs static vs Docker)
 - ✅ React key-based iframe remounting for reliable preview updates
 - ✅ Fixed dev server state synchronization between frontend and backend
 - ✅ Contextual UI messages when dev server is stopped
+- ✅ Improved tab naming ("Memory" instead of "CLAUDE.md")
 
 **Previous Enhancements (2025-10-21):**
 - ✅ Auto-refresh system for file explorer and preview on file changes
@@ -430,13 +434,28 @@ Frontend (planned):
   - Button now correctly switches between "Start" and "Stop" states
   - Preview automatically refreshes when dev server starts
   - Committed changes (10f1a80)
-- **07:10**: ✅ SESSION 6 COMPLETE - Dev server preview system fully functional
+- **07:15**: Refactored UI into tabbed interface
+  - **Issue**: Build/Deploy controls and logs were cluttering the Preview panel
+  - **Solution**: Split into main tabs: Preview, Build & Deploy, Memory, Admin
+  - Created BuildPanel.tsx component with all build/deploy operations, logs, and history
+  - Cleaned up PreviewPanel.tsx to focus only on preview functionality
+  - Removed build/deploy buttons, logs, and history from preview
+  - All four tabs (Preview, Build & Deploy, Memory, Admin) now at same level
+  - Committed changes (dc36ad4, 7bb38dd)
+- **07:20**: Improved tab naming
+  - Renamed "CLAUDE.md" tab to "Memory" for cleaner UI
+  - More intuitive for users
+  - Committed changes (2c35ddf)
+- **07:30**: ✅ SESSION 6 COMPLETE - Dev server preview system + tabbed UI refactor complete
 
 **Key Improvements:**
 - Dev server projects now have clear UX when server is stopped
 - Iframe auto-refresh works reliably via React key remounting
 - Start/Stop button states sync correctly with backend
 - Preview panel intelligently handles three preview types: dev server, Docker, and static
+- Clean separation: Preview tab for viewing, Build & Deploy tab for building
+- Build logs no longer cover the preview
+- Improved tab organization with intuitive naming
 
 ## Additional Context
 - Reference planning document: `Planning/atlas-mvp-plan.md`
