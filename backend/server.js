@@ -382,10 +382,17 @@ io.on('connection', (socket) => {
 
       // Spawn Claude CLI directly for streaming
       const { spawn } = await import('child_process');
+      const fs = await import('fs/promises');
+      const os = await import('os');
 
       // Use projectId as session ID for persistent session across all messages
       // This enables Claude to maintain context and remember conversation history
       const sessionId = projectId;
+
+      // Note: Session files are preserved for conversation history
+      // If you get "Session ID already in use" errors, it means a stale lock exists
+      // Manual cleanup: rm ~/.claude/projects/*/[session-id].jsonl
+      // This is usually caused by ungraceful process termination
 
       // Prepend system instructions to keep Claude within project directory
       const systemInstruction = `IMPORTANT SYSTEM INSTRUCTION: You are working on a user project located at: ${session.projectPath}
@@ -424,6 +431,7 @@ User's request: ${message}`;
       let tokensUsed = 0;
       let model = 'claude-sonnet-4-5';
       const toolUseEvents = []; // Collect tool use events for database storage
+      let stderrOutput = ''; // Capture stderr for error detection
 
       // Handle stdout - stream events to client in real-time
       claudeProcess.stdout.on('data', (data) => {
@@ -518,7 +526,9 @@ User's request: ${message}`;
 
       // Handle stderr
       claudeProcess.stderr.on('data', (data) => {
-        console.error('Claude CLI stderr:', data.toString());
+        const errorText = data.toString();
+        stderrOutput += errorText;
+        console.error('Claude CLI stderr:', errorText);
       });
 
       // Handle process completion
@@ -527,6 +537,37 @@ User's request: ${message}`;
         activeProcesses.delete(socket.id);
         activeProjectProcesses.delete(projectId);
         console.log(`Claude process completed for project ${projectId} with code ${code}`);
+
+        // Detect and auto-fix "Session ID already in use" errors
+        if (code === 1 && stderrOutput.includes('Session ID') && stderrOutput.includes('already in use')) {
+          console.log(`🔧 Detected stale session lock for ${projectId}, cleaning up...`);
+
+          // Clean up stale session files
+          const homeDir = os.homedir();
+          const projectPathEncoded = session.projectPath.replace(/\//g, '-').replace(/^-/, '');
+          const sessionDir = `${homeDir}/.claude/projects/${projectPathEncoded}`;
+          const sessionFiles = [
+            `${sessionDir}/${sessionId}.jsonl`,
+            `${homeDir}/.claude/debug/${sessionId}.txt`,
+            `${homeDir}/.claude/todos/${sessionId}-agent-${sessionId}.json`
+          ];
+
+          for (const file of sessionFiles) {
+            try {
+              await fs.unlink(file);
+              console.log(`   Removed: ${file}`);
+            } catch (error) {
+              // File might not exist, ignore
+            }
+          }
+
+          // Notify user to retry
+          socket.emit('ai-error', {
+            error: 'Session lock cleared. Please send your message again.',
+            retry: true
+          });
+          return;
+        }
 
         if (code === 0 || code === null || code === 143) { // null means killed by signal, 143 = SIGTERM (stopped by user)
           // Save assistant message to database with tool use events in meta (only if not killed)
