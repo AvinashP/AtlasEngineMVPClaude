@@ -130,13 +130,19 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
     setIsStartingDevServer(true);
     try {
       const startResponse = await devServerApi.start(projectId);
-      console.log('Dev server started:', startResponse.devServer);
+      console.log('🚀 Start response:', startResponse);
+      console.log('🚀 Dev server object:', startResponse.devServer);
+      console.log('🚀 Running status:', startResponse.devServer?.running);
+
+      // Update state
       setDevServer(startResponse.devServer);
       setHasDevServerProject(true); // Mark this as a dev server project
       setIframeReloadKey(prev => prev + 1); // Force iframe reload
+
+      console.log('✅ State updated, devServer:', startResponse.devServer);
       toast.success(`Dev server started on port ${startResponse.devServer.port}`);
     } catch (error: any) {
-      console.error('Failed to start dev server:', error);
+      console.error('❌ Failed to start dev server:', error);
       toast.error(`Failed to start dev server: ${error.message}`);
       // If it failed because it's not a dev server project, mark it as such
       if (error.message?.includes('Not a recognized dev server project')) {

@@ -108,9 +108,11 @@ class DevServerService {
           console.log(`Dev server already running for project ${projectId}`);
           return {
             success: true,
+            running: true, // Boolean flag for frontend
             port: existing.port,
             url: `http://localhost:${existing.port}`,
             status: 'running',
+            projectType: existing.projectType,
           };
         }
       }
@@ -226,6 +228,7 @@ class DevServerService {
 
       return {
         success: true,
+        running: true, // Boolean flag for frontend
         port: serverInfo.port, // Use actual port (may have auto-incremented)
         url: `http://localhost:${serverInfo.port}`,
         status: 'running',
