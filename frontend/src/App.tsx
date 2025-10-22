@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import FileTree from './components/FileTree';
 import CodeEditor from './components/CodeEditor';
-import PreviewPanel from './components/PreviewPanel';
+import PreviewTabContainer from './components/PreviewTabContainer';
 import MemoryPanel from './components/MemoryPanel';
 import ChatPanel from './components/ChatPanel';
 import AdminPanel from './components/AdminPanel';
@@ -416,7 +416,7 @@ function App() {
             </div>
           )}
           {activeTab?.type === 'preview' && currentProject && (
-            <PreviewPanel
+            <PreviewTabContainer
               projectId={currentProject.id}
               refreshKey={fileChangeCounter}
             />

@@ -1,12 +1,12 @@
 /**
  * Preview Panel Component
- * Displays app preview with build/deploy controls
+ * Displays live app preview with dev server and Docker preview support
  */
 
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { projectApi, previewApi, buildApi, devServerApi, type DevServer } from '@/services/api';
-import type { Preview, Build } from '@/types';
+import { previewApi, devServerApi, type DevServer } from '@/services/api';
+import type { Preview } from '@/types';
 
 interface PreviewPanelProps {
   projectId: string;
@@ -15,10 +15,6 @@ interface PreviewPanelProps {
 
 function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [builds, setBuilds] = useState<Build[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [buildLogs, setBuildLogs] = useState<string>('');
-  const [showLogs, setShowLogs] = useState(false);
   const [devServer, setDevServer] = useState<DevServer | null>(null);
   const [isStartingDevServer, setIsStartingDevServer] = useState(false);
   const [hasDevServerProject, setHasDevServerProject] = useState(false);
@@ -28,7 +24,6 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
 
   useEffect(() => {
     loadPreview();
-    loadBuilds();
     checkAndStartDevServer();
   }, [projectId]);
 
@@ -90,15 +85,6 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       setPreview(response.preview);
     } catch (error) {
       console.error('Failed to load preview:', error);
-    }
-  };
-
-  const loadBuilds = async () => {
-    try {
-      const response = await buildApi.list(projectId, 5);
-      setBuilds(response.builds);
-    } catch (error) {
-      console.error('Failed to load builds:', error);
     }
   };
 
@@ -167,66 +153,6 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
     }
   };
 
-  const handleBuild = async () => {
-    setLoading(true);
-    setShowLogs(true);
-    setBuildLogs('Starting build...\n');
-
-    try {
-      const response = await projectApi.build(projectId);
-      setBuildLogs(response.logs || 'Build completed successfully');
-      await loadBuilds();
-      toast.success('Build completed successfully!');
-    } catch (error: any) {
-      setBuildLogs(`Build failed: ${error.message}`);
-      console.error('Build failed:', error);
-      toast.error(`Build failed: ${error.message || 'Unknown error'}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDeploy = async () => {
-    if (builds.length === 0) {
-      toast.error('No builds available. Please build the project first.');
-      return;
-    }
-
-    const latestBuild = builds.find((b) => b.status === 'success');
-    if (!latestBuild) {
-      toast.error('No successful builds available');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await projectApi.deploy(projectId, latestBuild.id);
-      setPreview(response.preview);
-      toast.success('Deployment started successfully!');
-    } catch (error: any) {
-      console.error('Deploy failed:', error);
-      toast.error(`Deploy failed: ${error.message || 'Unknown error'}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleStopPreview = async () => {
-    if (!preview) return;
-
-    setLoading(true);
-    try {
-      await previewApi.stop(preview.id);
-      setPreview(null);
-      toast.success('Preview stopped successfully');
-    } catch (error) {
-      console.error('Failed to stop preview:', error);
-      toast.error('Failed to stop preview. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRefresh = () => {
     console.log('🔄 Manually refreshing preview');
     setIframeReloadKey(prev => prev + 1); // Force iframe remount
@@ -249,92 +175,33 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
 
   return (
     <div className="h-full flex flex-col bg-gray-800">
-      {/* Header */}
-      <div className="p-4 border-b border-gray-700">
-        <h2 className="text-lg font-semibold mb-3">Preview</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={handleBuild}
-            disabled={loading}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-sm font-medium"
-          >
-            {loading ? 'Building...' : 'Build'}
-          </button>
-          <button
-            onClick={handleDeploy}
-            disabled={loading || builds.length === 0}
-            className="px-3 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 rounded text-sm font-medium"
-          >
-            Deploy
-          </button>
-          {preview && (
-            <button
-              onClick={handleStopPreview}
-              disabled={loading}
-              className="px-3 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 rounded text-sm font-medium"
-            >
-              Stop
-            </button>
-          )}
-        </div>
-      </div>
 
-      {/* Build Logs */}
-      {showLogs && (
-        <div className="border-b border-gray-700">
-          <div className="p-2 bg-gray-900 flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Build Logs</span>
-            <button
-              onClick={() => setShowLogs(false)}
-              className="text-xs text-gray-500 hover:text-gray-300"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="p-3 bg-black text-xs font-mono text-green-400 max-h-40 overflow-auto">
-            <pre>{buildLogs}</pre>
-          </div>
-        </div>
-      )}
-
-      {/* Preview Status */}
+      {/* Docker Preview Status */}
       {preview && (
         <div className="p-3 bg-gray-900 border-b border-gray-700">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-gray-400">Status:</span>
-            <span className={`text-xs font-semibold ${getStatusColor(preview.status)}`}>
-              {preview.status.toUpperCase()}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-gray-400">Port:</span>
-            <span className="text-xs text-gray-300">{preview.port}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Build History */}
-      {builds.length > 0 && (
-        <div className="p-3 border-b border-gray-700">
-          <h3 className="text-xs font-semibold text-gray-400 mb-2">Recent Builds</h3>
-          <div className="space-y-1">
-            {builds.slice(0, 3).map((build) => (
-              <div
-                key={build.id}
-                className="flex items-center justify-between p-2 bg-gray-900 rounded text-xs"
+          <h3 className="text-xs font-semibold text-gray-400 mb-2">Docker Preview Status</h3>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Status:</span>
+              <span className={`text-xs font-semibold ${getStatusColor(preview.status)}`}>
+                {preview.status.toUpperCase()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">Port:</span>
+              <span className="text-xs text-gray-300">{preview.port}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-400">URL:</span>
+              <a
+                href={preview.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-blue-400 hover:text-blue-300 truncate"
               >
-                <span className="text-gray-300 truncate">
-                  {new Date(build.createdAt).toLocaleTimeString()}
-                </span>
-                <span
-                  className={`font-semibold ${
-                    build.status === 'success' ? 'text-green-400' : 'text-red-400'
-                  }`}
-                >
-                  {build.status}
-                </span>
-              </div>
-            ))}
+                {preview.url}
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -386,7 +253,7 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
       {/* Preview iframe */}
       <div className="flex-1 bg-white relative">
         {/* Message: Dev server stopped */}
-        {!currentUrl && hasDevServerProject && !isStartingDevServer && !loading && (
+        {!currentUrl && hasDevServerProject && !isStartingDevServer && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
             <div className="text-center px-6">
               <div className="mb-4">
@@ -426,22 +293,6 @@ function PreviewPanel({ projectId, refreshKey }: PreviewPanelProps) {
               <div className="text-white text-lg font-semibold mb-2">Starting development server...</div>
               <div className="text-sm text-gray-400">Installing dependencies and starting Vite</div>
               <div className="mt-2 text-xs text-gray-500">This may take a minute on first run</div>
-            </div>
-          </div>
-        )}
-
-        {/* Loading state: Building */}
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-95 z-10">
-            <div className="text-center">
-              <div className="mb-4">
-                <svg className="animate-spin h-12 w-12 text-green-500 mx-auto" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-              </div>
-              <div className="text-white text-lg font-semibold mb-2">Building project...</div>
-              <div className="text-sm text-gray-400">Compiling and bundling assets</div>
             </div>
           </div>
         )}
