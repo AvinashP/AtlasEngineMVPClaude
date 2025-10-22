@@ -41,7 +41,7 @@ AtlasEngine is an AI-powered full-stack development platform with persistent mem
 - Comments: Inline comments for complex logic, JSDoc for function documentation
 
 ## Current Status
-Last updated: 2025-10-21T12:30:00Z
+Last updated: 2025-10-22T07:10:00Z
 
 **✅ MVP CORE FEATURES: 13/18 COMPLETE (72%)**
 
@@ -71,7 +71,14 @@ Phase 1 MVP progress against Planning/atlas-mvp-plan.md checklist:
 17. Starter templates (Next.js, Vite+React, Express, Flask)
 18. Debug surface (/debug page for ops)
 
-**Recent Enhancements (2025-10-21):**
+**Recent Enhancements (2025-10-22):**
+- ✅ Dev server preview system refinements (Start/Stop controls, auto-refresh)
+- ✅ Intelligent preview type detection (dev server vs static vs Docker)
+- ✅ React key-based iframe remounting for reliable preview updates
+- ✅ Fixed dev server state synchronization between frontend and backend
+- ✅ Contextual UI messages when dev server is stopped
+
+**Previous Enhancements (2025-10-21):**
 - ✅ Auto-refresh system for file explorer and preview on file changes
 - ✅ Claude directory restriction system (prevents AI from modifying AtlasEngine codebase)
 - ✅ Static file preview server (serves HTML/CSS/JS directly from project directories)
@@ -401,6 +408,35 @@ Frontend (planned):
   - Identified 4 remaining MVP features: JWT auth, janitor, templates, debug page
   - Reorganized future enhancements into clear priorities
 - **12:30**: ✅ SESSION 5 COMPLETE - UX improvements and progress tracking updated
+
+### Session 6: Preview System Refinements (2025-10-22)
+- **06:30**: Fixed preview URL handling for dev server projects
+  - Added `hasDevServerProject` state to distinguish dev server (Vite/Next.js) vs static projects
+  - Shows helpful "Dev Server Stopped" message with inline start button when dev server stopped
+  - Prevents showing broken static preview URLs for projects that require dev servers
+  - URL bar now displays contextual messages: dev server URL, "Dev server stopped", or static URL
+  - Committed changes (c3b3ad4)
+- **06:45**: Implemented iframe auto-refresh on dev server start/stop
+  - Added `iframeReloadKey` state for forcing iframe remounts
+  - Used React key-based remounting instead of imperative src updates
+  - Iframe completely remounts when key changes, ensuring fresh load
+  - Key increments on: start dev server, stop dev server, manual refresh
+  - Committed changes (2af22bd, 5ffe1ca)
+- **07:00**: Fixed dev server state synchronization (ROOT CAUSE)
+  - **Issue**: Frontend checked `devServer.running` but backend only returned `status: 'running'` (string)
+  - **Result**: Start button stayed visible even when server was running, preview didn't update
+  - **Fix**: Added `running: true` boolean to backend responses in devServerService.js
+  - Updated both startDevServer() and already-running cases to include running flag
+  - Button now correctly switches between "Start" and "Stop" states
+  - Preview automatically refreshes when dev server starts
+  - Committed changes (10f1a80)
+- **07:10**: ✅ SESSION 6 COMPLETE - Dev server preview system fully functional
+
+**Key Improvements:**
+- Dev server projects now have clear UX when server is stopped
+- Iframe auto-refresh works reliably via React key remounting
+- Start/Stop button states sync correctly with backend
+- Preview panel intelligently handles three preview types: dev server, Docker, and static
 
 ## Additional Context
 - Reference planning document: `Planning/atlas-mvp-plan.md`
