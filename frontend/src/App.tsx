@@ -7,7 +7,8 @@ import { useState, useEffect, useRef } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
 import FileTree from './components/FileTree';
 import CodeEditor from './components/CodeEditor';
-import PreviewTabContainer from './components/PreviewTabContainer';
+import PreviewPanel from './components/PreviewPanel';
+import BuildPanel from './components/BuildPanel';
 import MemoryPanel from './components/MemoryPanel';
 import ChatPanel from './components/ChatPanel';
 import AdminPanel from './components/AdminPanel';
@@ -16,7 +17,7 @@ import type { Project } from './types';
 
 interface Tab {
   id: string;
-  type: 'file' | 'preview' | 'memory' | 'admin';
+  type: 'file' | 'preview' | 'build' | 'memory' | 'admin';
   title: string;
   path?: string;
   content?: string;
@@ -106,13 +107,18 @@ function App() {
     };
   }, []); // Empty dependency array - listeners added once
 
-  // Auto-open Preview, Memory, and Admin tabs when project loads
+  // Auto-open Preview, Build, Memory, and Admin tabs when project loads
   useEffect(() => {
     if (currentProject && tabs.length === 0) {
       const previewTab: Tab = {
         id: 'preview',
         type: 'preview',
         title: 'Preview',
+      };
+      const buildTab: Tab = {
+        id: 'build',
+        type: 'build',
+        title: 'Build & Deploy',
       };
       const memoryTab: Tab = {
         id: 'memory',
@@ -124,7 +130,7 @@ function App() {
         type: 'admin',
         title: 'Admin',
       };
-      setTabs([previewTab, memoryTab, adminTab]);
+      setTabs([previewTab, buildTab, memoryTab, adminTab]);
       setActiveTabId('preview');
     }
   }, [currentProject]);
@@ -225,8 +231,8 @@ function App() {
   const handleCloseTab = (tabId: string) => {
     const tab = tabs.find((t) => t.id === tabId);
 
-    // Don't allow closing Preview, Memory, and Admin tabs
-    if (tab?.id === 'preview' || tab?.id === 'memory' || tab?.id === 'admin') {
+    // Don't allow closing Preview, Build, Memory, and Admin tabs
+    if (tab?.id === 'preview' || tab?.id === 'build' || tab?.id === 'memory' || tab?.id === 'admin') {
       return;
     }
 
@@ -416,10 +422,13 @@ function App() {
             </div>
           )}
           {activeTab?.type === 'preview' && currentProject && (
-            <PreviewTabContainer
+            <PreviewPanel
               projectId={currentProject.id}
               refreshKey={fileChangeCounter}
             />
+          )}
+          {activeTab?.type === 'build' && currentProject && (
+            <BuildPanel projectId={currentProject.id} />
           )}
           {activeTab?.type === 'memory' && currentProject && (
             <MemoryPanel projectId={currentProject.id} />
