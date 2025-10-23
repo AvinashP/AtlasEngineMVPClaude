@@ -5,11 +5,11 @@ AtlasEngine is an AI-powered full-stack development platform with persistent mem
 
 ## Tech Stack
 - **Frontend**: React + TypeScript + Tailwind CSS + Monaco Editor
-- **Backend**: Node.js 20.x + Express.js + Socket.io
+- **Backend**: Node.js 20.x + Express.js + Socket.io + Multer (file uploads)
 - **Database**: PostgreSQL 15
 - **Containerization**: Docker with security hardening
 - **Reverse Proxy**: Caddy (auto SSL + wildcard)
-- **AI**: Claude Code CLI (Anthropic API)
+- **AI**: Claude Code CLI (Anthropic API) with multimodal support
 - **Process Manager**: PM2
 - **Build Queue**: Redis
 - **Hosting**: Oracle Cloud Free Tier (ARM VM)
@@ -30,6 +30,7 @@ AtlasEngine is an AI-powered full-stack development platform with persistent mem
 - **2025-10-20**: Created comprehensive testing suite with automated E2E script
 - **2025-10-20**: MVP uses simulated Claude responses - production will use real Anthropic API
 - **2025-10-20**: Prioritized testing over remaining features (auth, templates, janitor) per user request
+- **2025-10-23**: Image upload implementation - Claude reads images via Read tool instead of base64 stdin (initial stdin approach produced no output, Read tool approach works reliably)
 
 ## Coding Conventions
 - Use TypeScript for type safety (frontend and backend where applicable)
@@ -41,7 +42,7 @@ AtlasEngine is an AI-powered full-stack development platform with persistent mem
 - Comments: Inline comments for complex logic, JSDoc for function documentation
 
 ## Current Status
-Last updated: 2025-10-22T07:30:00Z
+Last updated: 2025-10-23T09:30:00Z
 
 **✅ MVP CORE FEATURES: 13/18 COMPLETE (72%)**
 
@@ -71,7 +72,18 @@ Phase 1 MVP progress against Planning/atlas-mvp-plan.md checklist:
 17. Starter templates (Next.js, Vite+React, Express, Flask)
 18. Debug surface (/debug page for ops)
 
-**Recent Enhancements (2025-10-22 - Session 6):**
+**Recent Enhancements (2025-10-23 - Session 7):**
+- ✅ **Image Upload Support** - Full multimodal chat capability with image attachments
+  - Backend: Multer integration for file uploads (3.75 MB limit, 20 files max)
+  - Upload endpoint with validation (JPEG, PNG, GIF, WebP only)
+  - Files stored in `backend/projects/{projectId}/uploads/`
+  - Claude reads images via Read tool (not base64 stdin approach)
+  - Frontend: Drag-and-drop UI with image previews
+  - Client-side validation and toast notifications
+  - Fixed authorization issues with UUID matching
+  - Enhanced logging for debugging Claude CLI communication
+
+**Previous Enhancements (2025-10-22 - Session 6):**
 - ✅ **Tabbed UI Refactor** - Split Preview panel into 4 main tabs (Preview, Build & Deploy, Memory, Admin)
 - ✅ **BuildPanel Component** - Dedicated panel for all build/deploy operations and logs
 - ✅ **Clean Separation** - Preview focused on viewing, Build focused on operations
@@ -82,7 +94,7 @@ Phase 1 MVP progress against Planning/atlas-mvp-plan.md checklist:
 - ✅ Contextual UI messages when dev server is stopped
 - ✅ Improved tab naming ("Memory" instead of "CLAUDE.md")
 
-**Previous Enhancements (2025-10-21):**
+**Enhancements (2025-10-21):**
 - ✅ Auto-refresh system for file explorer and preview on file changes
 - ✅ Claude directory restriction system (prevents AI from modifying AtlasEngine codebase)
 - ✅ Static file preview server (serves HTML/CSS/JS directly from project directories)
@@ -110,8 +122,8 @@ System is functional and ready for continued development.
 - ✅ Memory API routes (memory.js) - 200+ lines
 - ✅ Build API routes (builds.js) - 100+ lines
 - ✅ Preview API routes (previews.js) - 200+ lines
-- ✅ Chat API routes (chat.js) - 150+ lines
-- ✅ Main server (server.js) with WebSocket support - 350+ lines
+- ✅ Chat API routes (chat.js) with image upload support - 300+ lines
+- ✅ Main server (server.js) with WebSocket support and multimodal handling - 450+ lines
 - ✅ Winston logger utility - 100+ lines
 - ✅ Database initialization script (init-db.sh)
 - ✅ **Database query helpers for all CRUD operations (30+ functions)**
@@ -132,12 +144,16 @@ System is functional and ready for continued development.
 - ✅ TypeScript configuration (strict mode)
 - ✅ Tailwind CSS configuration
 - ✅ TypeScript type definitions (Project, Build, Preview, Memory, etc.)
-- ✅ API client service with axios (projectApi, memoryApi, buildApi, previewApi, chatApi, quotaApi)
+- ✅ API client service with axios (projectApi, memoryApi, buildApi, previewApi, chatApi with uploadFiles, quotaApi)
 - ✅ Main App component with three-panel layout - 150+ lines
 - ✅ FileTree component with folder navigation - 100+ lines
 - ✅ CodeEditor component with Monaco integration - 80+ lines
 - ✅ MemoryPanel component with CLAUDE.md editor - 200+ lines
-- ✅ ChatPanel component with Socket.IO real-time chat - 150+ lines
+- ✅ ChatPanel component with Socket.IO real-time chat and image uploads - 300+ lines
+  - Drag-and-drop file upload UI
+  - Image preview thumbnails
+  - Client-side validation (type, size, count)
+  - Toast notifications for user feedback
 - ✅ PreviewPanel component with iframe isolation - 200+ lines
 - ✅ README.md with project overview and setup instructions
 
