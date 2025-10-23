@@ -55,6 +55,8 @@ lerna-debug.log*
 !/projects/.gitkeep
 /uploads/*
 !/uploads/.gitkeep
+backend/projects/
+backend/uploads/
 
 # PM2
 .pm2/
