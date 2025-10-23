@@ -9,6 +9,8 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { createServer } from 'http';
 import { Server as SocketIO } from 'socket.io';
+import fs from 'fs/promises';
+import path from 'path';
 
 // Load environment variables
 dotenv.config();
@@ -315,7 +317,7 @@ io.on('connection', (socket) => {
 
   // AI chat message handler with streaming support
   socket.on('ai-message', async (data) => {
-    const { projectId, message } = data;
+    const { projectId, message, attachments } = data;
 
     try {
       // Forward typing event
@@ -345,7 +347,7 @@ io.on('connection', (socket) => {
           content: message,
           tokensUsed: 0,
           model: null,
-          meta: null,
+          meta: attachments && attachments.length > 0 ? { attachments } : null,
         });
       } catch (error) {
         console.error('Failed to save user message:', error.message);
@@ -405,14 +407,27 @@ Always use relative paths when working with files.
 
 User's request: ${message}`;
 
+      // Prepare Claude CLI arguments with image support
       const claudeArgs = [
         '--print',
         '--output-format', 'stream-json',
         '--verbose',
         '--dangerously-skip-permissions',
         '--session-id', sessionId,
-        systemInstruction
       ];
+
+      // If attachments exist, ask Claude to read the image files
+      const hasAttachments = attachments && attachments.length > 0;
+      let finalPrompt = systemInstruction;
+
+      if (hasAttachments) {
+        console.log(`Sending ${attachments.length} attachment(s) to Claude via Read tool`);
+        // Build prompt that asks Claude to read the image files
+        const imageFileList = attachments.map((p, i) => `${i + 1}. ${p}`).join('\n');
+        finalPrompt = `${systemInstruction}\n\nIMPORTANT: The user has attached the following image file(s). Please use the Read tool to view ${attachments.length > 1 ? 'them' : 'it'}:\n${imageFileList}\n\nAfter reading the image${attachments.length > 1 ? 's' : ''}, please respond to the user's request.`;
+      }
+
+      claudeArgs.push(finalPrompt);
 
       const claudePath = '/opt/homebrew/bin/claude';
       const claudeProcess = spawn(claudePath, claudeArgs, {
@@ -433,11 +448,14 @@ User's request: ${message}`;
       // Handle stdout - stream events to client in real-time
       claudeProcess.stdout.on('data', (data) => {
         const rawOutput = data.toString();
+        console.log('📥 Claude stdout received:', rawOutput.substring(0, 200)); // Log first 200 chars
         const lines = rawOutput.split('\n').filter(line => line.trim());
+        console.log(`📋 Parsed ${lines.length} lines from stdout`);
 
         for (const line of lines) {
           try {
             const event = JSON.parse(line);
+            console.log('🎯 Claude event:', event.type, event.message ? '(has message)' : '');
 
             // Emit raw event to client for debugging
             // console.log('Claude event:', event.type);
@@ -523,7 +541,15 @@ User's request: ${message}`;
 
       // Handle stderr
       claudeProcess.stderr.on('data', (data) => {
-        console.error('Claude CLI stderr:', data.toString());
+        const stderrOutput = data.toString();
+        console.error('❌ Claude CLI stderr:', stderrOutput);
+        // If stderr contains actual errors (not just warnings), emit to client
+        if (stderrOutput.toLowerCase().includes('error') || stderrOutput.toLowerCase().includes('failed')) {
+          socket.emit('claude-stream-event', {
+            type: 'error',
+            data: { error: stderrOutput }
+          });
+        }
       });
 
       // Handle process completion
@@ -532,6 +558,7 @@ User's request: ${message}`;
         activeProcesses.delete(socket.id);
         activeProjectProcesses.delete(projectId);
         console.log(`Claude process completed for project ${projectId} with code ${code}`);
+        console.log(`📊 Final state: assistantMessage length=${assistantMessage.length}, tokensUsed=${tokensUsed}, toolUseEvents=${toolUseEvents.length}`);
 
         if (code === 0 || code === null || code === 143) { // null means killed by signal, 143 = SIGTERM (stopped by user)
           // Save assistant message to database with tool use events in meta (only if not killed)

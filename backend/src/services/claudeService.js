@@ -76,10 +76,11 @@ class ClaudeService extends EventEmitter {
    * Send a message to Claude Code CLI
    * @param {string} projectId - Project ID
    * @param {string} message - User message
+   * @param {Array<string>} attachments - Optional array of file paths (images)
    * @param {Object} options - Additional options
    * @returns {Promise<Object>} Response from Claude
    */
-  async sendMessage(projectId, message, options = {}) {
+  async sendMessage(projectId, message, attachments = [], options = {}) {
     try {
       const session = this.sessions.get(projectId);
       if (!session) {
@@ -101,6 +102,7 @@ class ClaudeService extends EventEmitter {
         role: 'user',
         content: message,
         timestamp: new Date(),
+        attachments: attachments || [],
       };
       session.messageHistory.push(userMessage);
 
@@ -113,7 +115,7 @@ class ClaudeService extends EventEmitter {
           content: message,
           tokensUsed: 0, // User messages don't consume tokens
           model: null,
-          meta: null,
+          meta: attachments && attachments.length > 0 ? { attachments } : null,
         });
       } catch (error) {
         logger.error(`Failed to save user message to database: ${error.message}`);
@@ -123,8 +125,8 @@ class ClaudeService extends EventEmitter {
       // Emit typing event
       this.emit('ai-typing', { projectId });
 
-      // Execute Claude Code CLI command
-      const response = await this._executeClaudeCommand(projectId, message, options);
+      // Execute Claude Code CLI command with attachments
+      const response = await this._executeClaudeCommand(projectId, message, attachments, options);
 
       // Add assistant response to history
       const assistantMessage = {
@@ -189,7 +191,7 @@ class ClaudeService extends EventEmitter {
    * Execute Claude Code CLI command
    * @private
    */
-  async _executeClaudeCommand(projectId, message, options = {}) {
+  async _executeClaudeCommand(projectId, message, attachments = [], options = {}) {
     const session = this.sessions.get(projectId);
 
     // Load recent conversation history from database
@@ -212,13 +214,19 @@ class ClaudeService extends EventEmitter {
       let errorOutput = '';
       let tokensUsed = 0;
 
-      // Prepare the command with conversation history
+      // Prepare the command with conversation history and attachments
       const args = [
         '--project-path', session.projectPath,
         '--message', message,
         '--format', 'json',
         '--history', JSON.stringify(conversationHistory),
       ];
+
+      // Add attachments if provided
+      if (attachments && attachments.length > 0) {
+        args.push('--attachments', JSON.stringify(attachments));
+        logger.info(`Sending ${attachments.length} attachment(s) to Claude`);
+      }
 
       // Spawn claude-wrapper.js which integrates with real Claude CLI
       const claudeProcess = spawn('node', [

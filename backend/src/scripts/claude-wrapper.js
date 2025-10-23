@@ -7,6 +7,8 @@
 
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
+import fs from 'fs/promises';
+import path from 'path';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -14,6 +16,7 @@ let projectPath = '.';
 let message = '';
 let format = 'json';
 let conversationHistory = [];
+let attachments = [];
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--project-path' && args[i + 1]) {
@@ -32,6 +35,47 @@ for (let i = 0; i < args.length; i++) {
       console.error('Failed to parse conversation history:', error.message);
     }
     i++;
+  } else if (args[i] === '--attachments' && args[i + 1]) {
+    try {
+      attachments = JSON.parse(args[i + 1]);
+    } catch (error) {
+      console.error('Failed to parse attachments:', error.message);
+    }
+    i++;
+  }
+}
+
+/**
+ * Convert image file to base64 content block
+ */
+async function imageToContentBlock(filePath) {
+  try {
+    // Read file
+    const fileBuffer = await fs.readFile(filePath);
+    const base64Data = fileBuffer.toString('base64');
+
+    // Determine MIME type from extension
+    const ext = path.extname(filePath).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+    };
+    const mediaType = mimeTypes[ext] || 'image/jpeg';
+
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: mediaType,
+        data: base64Data,
+      },
+    };
+  } catch (error) {
+    console.error(`Failed to read image ${filePath}:`, error.message);
+    return null;
   }
 }
 
@@ -43,6 +87,26 @@ async function main() {
     // Generate or use existing session ID for conversation continuity
     const sessionId = randomUUID();
 
+    // Build content blocks if attachments are provided
+    let hasAttachments = attachments && attachments.length > 0;
+    let contentBlocks = [];
+
+    if (hasAttachments) {
+      // Convert attachments to image content blocks
+      for (const attachmentPath of attachments) {
+        const imageBlock = await imageToContentBlock(attachmentPath);
+        if (imageBlock) {
+          contentBlocks.push(imageBlock);
+        }
+      }
+
+      // Add text message as final content block
+      contentBlocks.push({
+        type: 'text',
+        text: message,
+      });
+    }
+
     // Prepare Claude CLI command
     const claudeArgs = [
       '--print',                          // Non-interactive mode
@@ -50,8 +114,15 @@ async function main() {
       '--verbose',                        // Required for stream-json with --print
       '--dangerously-skip-permissions',   // Auto-accept permissions for automation
       '--session-id', sessionId,          // Session continuity
-      message                             // The user's prompt
     ];
+
+    // Add input format for multimodal messages
+    if (hasAttachments) {
+      claudeArgs.push('--input-format', 'stream-json');
+    } else {
+      // For text-only messages, pass message as argument
+      claudeArgs.push(message);
+    }
 
     // Spawn Claude Code CLI process
     // Use full path since /opt/homebrew/bin may not be in PATH for spawned processes
@@ -149,6 +220,15 @@ async function main() {
           }) + '\n';
           claudeProcess.stdin.write(streamEvent);
         }
+      }
+
+      // Send multimodal message via stdin if attachments are present
+      if (hasAttachments && contentBlocks.length > 0) {
+        const userMessage = JSON.stringify({
+          type: 'user',
+          content: contentBlocks
+        }) + '\n';
+        claudeProcess.stdin.write(userMessage);
       }
 
       // Close stdin to signal we're done sending input

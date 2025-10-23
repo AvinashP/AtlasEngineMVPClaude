@@ -201,6 +201,50 @@ export const previewApi = {
 };
 
 // ============================================================================
+// CHAT API
+// ============================================================================
+
+export interface UploadedFile {
+  filename: string;
+  originalName: string;
+  path: string;
+  mimetype: string;
+  size: number;
+  relativePath: string;
+}
+
+export const chatApi = {
+  /**
+   * Upload files (images) for use in chat messages
+   */
+  uploadFiles: async (projectId: string, files: File[]) => {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    // Add userId for authentication (mock for MVP)
+    formData.append('userId', localStorage.getItem('userId') || '00000000-0000-0000-0000-000000000000');
+
+    const response = await axios.post<{ success: boolean; files: UploadedFile[]; count: number }>(
+      `${API_BASE_URL}/chat/sessions/${projectId}/upload`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          // Add auth token if available
+          ...(localStorage.getItem('auth_token') && {
+            Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+          }),
+        },
+      }
+    );
+
+    return response.data;
+  },
+};
+
+// ============================================================================
 // QUOTA API
 // ============================================================================
 

@@ -8,6 +8,8 @@ import { io, Socket } from 'socket.io-client';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { chatApi, type UploadedFile } from '@/services/api';
+import toast from 'react-hot-toast';
 
 interface ChatPanelProps {
   projectId: string;
@@ -24,6 +26,7 @@ interface Message {
   toolName?: string;
   toolInput?: any;
   toolId?: string;
+  attachments?: UploadedFile[];
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
@@ -39,9 +42,13 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [currentActivity, setCurrentActivity] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadedAttachments, setUploadedAttachments] = useState<UploadedFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileOperationsOccurredRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load chat history from database
   const loadHistory = async () => {
@@ -270,27 +277,47 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() || !socketRef.current || !isConnected) return;
 
     // Reset file operations flag for new request
     fileOperationsOccurredRef.current = false;
 
-    const userMessage: Message = {
-      id: generateId(),
-      role: 'user',
-      content: input,
-      timestamp: new Date(),
-    };
+    try {
+      // Upload files first if any are selected
+      let attachmentPaths: string[] = [];
+      if (selectedFiles.length > 0) {
+        setIsUploading(true);
+        const uploadResult = await chatApi.uploadFiles(projectId, selectedFiles);
+        attachmentPaths = uploadResult.files.map((f) => f.path);
+        toast.success(`Uploaded ${uploadResult.count} file(s)`);
+      }
 
-    setMessages((prev) => [...prev, userMessage]);
-    socketRef.current.emit('ai-message', {
-      projectId,
-      message: input,
-    });
+      const userMessage: Message = {
+        id: generateId(),
+        role: 'user',
+        content: input,
+        timestamp: new Date(),
+        attachments: selectedFiles.length > 0 ? uploadedAttachments : undefined,
+      };
 
-    setInput('');
-    setIsTyping(true);
+      setMessages((prev) => [...prev, userMessage]);
+      socketRef.current.emit('ai-message', {
+        projectId,
+        message: input,
+        attachments: attachmentPaths, // Send file paths to backend
+      });
+
+      setInput('');
+      setSelectedFiles([]);
+      setUploadedAttachments([]);
+      setIsTyping(true);
+    } catch (error: any) {
+      console.error('Failed to send message:', error);
+      toast.error(`Failed to send message: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -367,6 +394,53 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
         timestamp: new Date(),
       },
     ]);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    validateAndAddFiles(files);
+  };
+
+  const validateAndAddFiles = (files: File[]) => {
+    const maxSize = 3.75 * 1024 * 1024; // 3.75 MB
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    const maxFiles = 20;
+
+    const validFiles = files.filter((file) => {
+      if (!allowedTypes.includes(file.type)) {
+        toast.error(`${file.name}: Invalid file type. Only JPEG, PNG, GIF, and WebP allowed.`);
+        return false;
+      }
+      if (file.size > maxSize) {
+        toast.error(`${file.name}: File size exceeds 3.75 MB limit.`);
+        return false;
+      }
+      return true;
+    });
+
+    if (selectedFiles.length + validFiles.length > maxFiles) {
+      toast.error(`Maximum ${maxFiles} files allowed. Please remove some files.`);
+      return;
+    }
+
+    setSelectedFiles((prev) => [...prev, ...validFiles]);
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const files = Array.from(e.dataTransfer.files);
+    validateAndAddFiles(files);
   };
 
   return (
@@ -542,8 +616,57 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-700">
+      <div className="p-4 border-t border-gray-700" onDragOver={handleDragOver} onDrop={handleDrop}>
+        {/* File Attachments Preview */}
+        {selectedFiles.length > 0 && (
+          <div className="mb-3 flex gap-2 flex-wrap">
+            {selectedFiles.map((file, index) => (
+              <div
+                key={index}
+                className="relative bg-gray-900 border border-gray-700 rounded p-2 flex items-center gap-2"
+              >
+                <img
+                  src={URL.createObjectURL(file)}
+                  alt={file.name}
+                  className="w-12 h-12 object-cover rounded"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-300 truncate">{file.name}</div>
+                  <div className="text-xs text-gray-500">{(file.size / 1024).toFixed(1)} KB</div>
+                </div>
+                <button
+                  onClick={() => handleRemoveFile(index)}
+                  className="text-gray-400 hover:text-red-400"
+                  title="Remove file"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/gif,image/webp"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
         <div className="flex gap-2">
+          {/* File attachment button */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!isConnected || isProcessing || isUploading}
+            className="px-3 py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 rounded text-sm self-end"
+            title="Attach images"
+          >
+            📎
+          </button>
+
           <textarea
             value={isProcessing ? '' : input}
             onChange={(e) => setInput(e.target.value)}
@@ -555,7 +678,7 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
                 ? 'Ask Claude Code anything...'
                 : 'Connecting to chat...'
             }
-            disabled={!isConnected || isProcessing}
+            disabled={!isConnected || isProcessing || isUploading}
             className="flex-1 px-3 py-2 bg-gray-900 border border-gray-700 rounded text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none disabled:opacity-75"
             rows={3}
           />
@@ -569,15 +692,21 @@ function ChatPanel({ projectId, onFileChange }: ChatPanelProps) {
           ) : (
             <button
               onClick={handleSend}
-              disabled={!input.trim() || !isConnected}
+              disabled={(!input.trim() && selectedFiles.length === 0) || !isConnected || isUploading}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 rounded text-sm font-medium self-end"
             >
-              Send
+              {isUploading ? 'Uploading...' : 'Send'}
             </button>
           )}
         </div>
         <div className="mt-2 text-xs text-gray-500">
-          {isProcessing ? 'Claude is working...' : 'Press Enter to send, Shift+Enter for new line'}
+          {isProcessing
+            ? 'Claude is working...'
+            : isUploading
+            ? 'Uploading files...'
+            : selectedFiles.length > 0
+            ? `${selectedFiles.length} file(s) selected • Press Enter to send, Shift+Enter for new line`
+            : 'Press Enter to send, Shift+Enter for new line • Drag & drop images here'}
         </div>
       </div>
     </div>
